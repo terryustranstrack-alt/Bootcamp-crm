@@ -14,22 +14,27 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { logStatusChange } from "@/lib/activity";
 import { needsFollowUp } from "@/lib/reminders";
-import { LEAD_STATUSES, type Lead, type LeadStatus } from "@/lib/types";
+import { useProfiles, profileLabel } from "@/lib/useProfiles";
+import { LEAD_STATUSES, type Lead, type LeadStatus, type Profile } from "@/lib/types";
 
 const supabase = createClient();
 const SEMUA_SUMBER = "Semua sumber";
+const SEMUA_ASSIGNEE = "Semua assignee";
 
 function LeadCard({
   lead,
+  profiles,
   onStatusChange,
 }: {
   lead: Lead;
+  profiles: Profile[];
   onStatusChange: (leadId: string, status: LeadStatus) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: lead.id });
 
   const overdue = needsFollowUp(lead.status, lead.tanggal_update);
+  const assignee = profiles.find((p) => p.id === lead.assigned_to);
 
   const style = transform
     ? {
@@ -66,6 +71,9 @@ function LeadCard({
             Perlu follow-up
           </p>
         )}
+        <p className="text-xs text-gray-500 mb-2">
+          {assignee ? profileLabel(assignee) : "Belum ditugaskan"}
+        </p>
       </div>
       <select
         value={lead.status}
@@ -85,10 +93,12 @@ function LeadCard({
 function LeadColumn({
   status,
   leads,
+  profiles,
   onStatusChange,
 }: {
   status: LeadStatus;
   leads: Lead[];
+  profiles: Profile[];
   onStatusChange: (leadId: string, status: LeadStatus) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
@@ -103,7 +113,12 @@ function LeadColumn({
       </h2>
       <div className="flex flex-col gap-3 min-h-8">
         {leads.map((lead) => (
-          <LeadCard key={lead.id} lead={lead} onStatusChange={onStatusChange} />
+          <LeadCard
+            key={lead.id}
+            lead={lead}
+            profiles={profiles}
+            onStatusChange={onStatusChange}
+          />
         ))}
       </div>
     </div>
@@ -116,6 +131,8 @@ export default function LeadBoard() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sumberFilter, setSumberFilter] = useState(SEMUA_SUMBER);
+  const [assigneeFilter, setAssigneeFilter] = useState(SEMUA_ASSIGNEE);
+  const profiles = useProfiles();
 
   async function loadLeads() {
     const { data, error } = await supabase
@@ -190,9 +207,11 @@ export default function LeadBoard() {
         lead.kontak.toLowerCase().includes(q);
       const cocokSumber =
         sumberFilter === SEMUA_SUMBER || lead.sumber === sumberFilter;
-      return cocokPencarian && cocokSumber;
+      const cocokAssignee =
+        assigneeFilter === SEMUA_ASSIGNEE || lead.assigned_to === assigneeFilter;
+      return cocokPencarian && cocokSumber && cocokAssignee;
     });
-  }, [leads, search, sumberFilter]);
+  }, [leads, search, sumberFilter, assigneeFilter]);
 
   if (loading) return <p className="p-8">Memuat leads...</p>;
   if (error) return <p className="p-8 text-red-600">Gagal memuat: {error}</p>;
@@ -218,6 +237,18 @@ export default function LeadBoard() {
             </option>
           ))}
         </select>
+        <select
+          value={assigneeFilter}
+          onChange={(e) => setAssigneeFilter(e.target.value)}
+          className="border rounded px-3 py-2 text-sm"
+        >
+          <option value={SEMUA_ASSIGNEE}>{SEMUA_ASSIGNEE}</option>
+          {profiles.map((p) => (
+            <option key={p.id} value={p.id}>
+              {profileLabel(p)}
+            </option>
+          ))}
+        </select>
       </div>
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <div className="flex gap-4 overflow-x-auto">
@@ -226,6 +257,7 @@ export default function LeadBoard() {
               key={status}
               status={status}
               leads={filteredLeads.filter((lead) => lead.status === status)}
+              profiles={profiles}
               onStatusChange={handleStatusChange}
             />
           ))}

@@ -5,7 +5,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { logNote, logStatusChange } from "@/lib/activity";
 import { useSumberOptions } from "@/lib/useSumberOptions";
+import { useProfiles, profileLabel } from "@/lib/useProfiles";
+import { useCurrentProfile } from "@/lib/useCurrentProfile";
 import SumberSelect from "@/components/SumberSelect";
+import AssigneeSelect from "@/components/AssigneeSelect";
 import { downloadCsv, leadsToCsv, parseLeadsCsv } from "@/lib/csv";
 import { LEAD_STATUSES, type Lead, type LeadStatus } from "@/lib/types";
 
@@ -17,6 +20,7 @@ type EditForm = {
   sumber: string;
   produk: string;
   estimasi_nilai: string;
+  assigned_to: string;
 };
 
 export default function ProspekTable() {
@@ -31,12 +35,15 @@ export default function ProspekTable() {
     sumber: "",
     produk: "",
     estimasi_nilai: "",
+    assigned_to: "",
   });
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sumberOptions = useSumberOptions();
+  const profiles = useProfiles();
+  const { profile: currentProfile } = useCurrentProfile();
 
   async function loadLeads() {
     const { data, error } = await supabase
@@ -108,6 +115,7 @@ export default function ProspekTable() {
       produk: lead.produk ?? "",
       estimasi_nilai:
         lead.estimasi_nilai != null ? String(lead.estimasi_nilai) : "",
+      assigned_to: lead.assigned_to ?? "",
     });
   }
 
@@ -142,12 +150,20 @@ export default function ProspekTable() {
       ? Number(editForm.estimasi_nilai)
       : null;
 
+    // Non-admin (sales) tidak boleh ubah assignee — lihat migration 0007.
+    const assignedToBaru = currentProfile?.is_admin
+      ? editForm.assigned_to || null
+      : lead.assigned_to;
+
     const perubahan: string[] = [];
     if (editForm.nama !== lead.nama) perubahan.push("nama");
     if (editForm.kontak !== lead.kontak) perubahan.push("kontak");
     if (sumberBaru !== lead.sumber) perubahan.push("sumber");
     if (produkBaru !== lead.produk) perubahan.push("produk");
     if (estimasiBaru !== lead.estimasi_nilai) perubahan.push("estimasi nilai");
+    if (currentProfile?.is_admin && assignedToBaru !== lead.assigned_to) {
+      perubahan.push("assignee");
+    }
 
     const { error } = await supabase
       .from("leads")
@@ -157,6 +173,7 @@ export default function ProspekTable() {
         sumber: sumberBaru,
         produk: produkBaru,
         estimasi_nilai: estimasiBaru,
+        assigned_to: assignedToBaru,
         tanggal_update: new Date().toISOString(),
       })
       .eq("id", lead.id);
@@ -236,6 +253,7 @@ export default function ProspekTable() {
               <th className="p-2">Sumber</th>
               <th className="p-2">Produk</th>
               <th className="p-2">Estimasi Nilai</th>
+              <th className="p-2">Assignee</th>
               <th className="p-2">Status</th>
               <th className="p-2">Update Terakhir</th>
               <th className="p-2">Aksi</th>
@@ -244,7 +262,7 @@ export default function ProspekTable() {
           <tbody>
             {filteredLeads.length === 0 && (
               <tr>
-                <td colSpan={8} className="p-4 text-center text-gray-500">
+                <td colSpan={9} className="p-4 text-center text-gray-500">
                   Tidak ada prospek yang cocok.
                 </td>
               </tr>
@@ -312,6 +330,24 @@ export default function ProspekTable() {
                           className="border rounded px-2 py-1 w-full"
                         />
                       </td>
+                      <td className="p-2 min-w-40">
+                        {currentProfile?.is_admin ? (
+                          <AssigneeSelect
+                            value={editForm.assigned_to || null}
+                            onChange={(assigned_to) =>
+                              setEditForm({
+                                ...editForm,
+                                assigned_to: assigned_to ?? "",
+                              })
+                            }
+                            profiles={profiles}
+                          />
+                        ) : (
+                          <span className="text-gray-500">
+                            {currentProfile ? profileLabel(currentProfile) : "-"}
+                          </span>
+                        )}
+                      </td>
                     </>
                   ) : (
                     <>
@@ -330,6 +366,14 @@ export default function ProspekTable() {
                         {lead.estimasi_nilai != null
                           ? lead.estimasi_nilai.toLocaleString("id-ID")
                           : "-"}
+                      </td>
+                      <td className="p-2">
+                        {(() => {
+                          const assignee = profiles.find(
+                            (p) => p.id === lead.assigned_to,
+                          );
+                          return assignee ? profileLabel(assignee) : "-";
+                        })()}
                       </td>
                     </>
                   )}

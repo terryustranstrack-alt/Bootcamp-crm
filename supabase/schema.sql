@@ -24,30 +24,18 @@ alter table leads enable row level security;
 
 -- Aplikasi punya login (lihat supabase/migrations/0002_auth_policies.sql),
 -- jadi hanya user yang sudah authenticated yang boleh baca/tulis tabel ini.
-create policy "authenticated can read leads"
-  on leads for select
-  to authenticated
-  using (true);
-
+-- Policy select/update/delete final (dengan silo per-sales) didefinisikan
+-- di bagian bawah file ini, setelah tabel "profiles" ada (lihat
+-- supabase/migrations/0007_lead_visibility_rls.sql).
 create policy "authenticated can insert leads"
   on leads for insert
   to authenticated
   with check (true);
 
-create policy "authenticated can update leads"
-  on leads for update
-  to authenticated
-  using (true)
-  with check (true);
-
--- Lihat supabase/migrations/0003_delete_policy.sql
-create policy "authenticated can delete leads"
-  on leads for delete
-  to authenticated
-  using (true);
-
 -- Lihat supabase/migrations/0004_lead_activities.sql
 -- Riwayat aktivitas per lead (perubahan status & catatan), append-only.
+-- Policy select/insert final ada di bagian bawah file ini (butuh tabel
+-- "leads" & "profiles" sudah ada untuk subquery visibilitas).
 create table if not exists lead_activities (
   id uuid primary key default gen_random_uuid(),
   lead_id uuid not null references leads(id) on delete cascade,
@@ -61,12 +49,124 @@ create table if not exists lead_activities (
 
 alter table lead_activities enable row level security;
 
-create policy "authenticated can read lead activities"
-  on lead_activities for select
+-- Lihat supabase/migrations/0005_profiles.sql
+-- Representasi ringan auth.users (yang tidak bisa langsung di-query dari
+-- client) supaya lead bisa di-assign ke sales tertentu.
+create table if not exists profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text,
+  full_name text,
+  -- Lihat supabase/migrations/0006_sales_admin.sql
+  phone text,
+  is_admin boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+alter table profiles enable row level security;
+
+create policy "authenticated can read profiles"
+  on profiles for select
   to authenticated
   using (true);
 
-create policy "authenticated can insert lead activities"
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.profiles (id, email, full_name)
+  values (new.id, new.email, new.raw_user_meta_data ->> 'full_name');
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+alter table leads add column if not exists assigned_to uuid references profiles(id) on delete set null;
+
+-- Lihat supabase/migrations/0007_lead_visibility_rls.sql
+-- Silo per-sales: sales cuma boleh akses lead yang assigned_to/created_by
+-- dia sendiri; admin (profiles.is_admin) tetap akses semua.
+alter table leads add column if not exists created_by uuid references profiles(id) on delete set null;
+
+create or replace function public.set_lead_created_by()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  new.created_by := auth.uid();
+  return new;
+end;
+$$;
+
+drop trigger if exists on_lead_insert_set_created_by on leads;
+create trigger on_lead_insert_set_created_by
+  before insert on leads
+  for each row execute function public.set_lead_created_by();
+
+create policy "sales read own leads, admin reads all"
+  on leads for select
+  to authenticated
+  using (
+    assigned_to = auth.uid()
+    or created_by = auth.uid()
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+  );
+
+create policy "sales update own leads, admin updates all"
+  on leads for update
+  to authenticated
+  using (
+    assigned_to = auth.uid()
+    or created_by = auth.uid()
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+  )
+  with check (
+    assigned_to = auth.uid()
+    or created_by = auth.uid()
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+  );
+
+create policy "sales delete own leads, admin deletes all"
+  on leads for delete
+  to authenticated
+  using (
+    assigned_to = auth.uid()
+    or created_by = auth.uid()
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+  );
+
+create policy "read activities of visible leads"
+  on lead_activities for select
+  to authenticated
+  using (
+    exists (
+      select 1 from leads l
+      where l.id = lead_activities.lead_id
+      and (
+        l.assigned_to = auth.uid()
+        or l.created_by = auth.uid()
+        or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+      )
+    )
+  );
+
+create policy "insert activities of visible leads"
   on lead_activities for insert
   to authenticated
-  with check (true);
+  with check (
+    exists (
+      select 1 from leads l
+      where l.id = lead_activities.lead_id
+      and (
+        l.assigned_to = auth.uid()
+        or l.created_by = auth.uid()
+        or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+      )
+    )
+  );

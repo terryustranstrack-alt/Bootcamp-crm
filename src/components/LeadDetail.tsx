@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { logNote, logStatusChange } from "@/lib/activity";
 import { useSumberOptions } from "@/lib/useSumberOptions";
+import { useProfiles, profileLabel } from "@/lib/useProfiles";
+import { useCurrentProfile } from "@/lib/useCurrentProfile";
 import SumberSelect from "@/components/SumberSelect";
+import AssigneeSelect from "@/components/AssigneeSelect";
 import {
   LEAD_STATUSES,
   type Lead,
@@ -33,9 +36,12 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
     sumber: "",
     produk: "",
     estimasi_nilai: "",
+    assigned_to: "",
   });
   const [saving, setSaving] = useState(false);
   const sumberOptions = useSumberOptions();
+  const profiles = useProfiles();
+  const { profile: currentProfile } = useCurrentProfile();
 
   async function loadLead() {
     const { data, error } = await supabase
@@ -139,6 +145,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
       produk: lead.produk ?? "",
       estimasi_nilai:
         lead.estimasi_nilai != null ? String(lead.estimasi_nilai) : "",
+      assigned_to: lead.assigned_to ?? "",
     });
     setIsEditing(true);
   }
@@ -161,6 +168,15 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
     if (produkBaru !== lead.produk) perubahan.push("produk");
     if (estimasiBaru !== lead.estimasi_nilai) perubahan.push("estimasi nilai");
 
+    // Non-admin (sales) tidak boleh ubah assignee — lead tetap milik mereka
+    // sendiri (assigned_to/created_by), lihat migration 0007.
+    const assignedToBaru = currentProfile?.is_admin
+      ? editForm.assigned_to || null
+      : lead.assigned_to;
+    if (currentProfile?.is_admin && assignedToBaru !== lead.assigned_to) {
+      perubahan.push("assignee");
+    }
+
     const { error } = await supabase
       .from("leads")
       .update({
@@ -169,6 +185,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
         sumber: sumberBaru,
         produk: produkBaru,
         estimasi_nilai: estimasiBaru,
+        assigned_to: assignedToBaru,
         tanggal_update: new Date().toISOString(),
       })
       .eq("id", leadId);
@@ -340,6 +357,26 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
             />
           </div>
 
+          <div className="flex flex-col gap-1">
+            <label htmlFor="edit-assigned_to" className="text-sm font-medium">
+              Ditugaskan ke
+            </label>
+            {currentProfile?.is_admin ? (
+              <AssigneeSelect
+                id="edit-assigned_to"
+                value={editForm.assigned_to || null}
+                onChange={(assigned_to) =>
+                  setEditForm({ ...editForm, assigned_to: assigned_to ?? "" })
+                }
+                profiles={profiles}
+              />
+            ) : (
+              <p className="text-sm text-gray-500 px-3 py-2 border rounded bg-gray-50">
+                {currentProfile ? profileLabel(currentProfile) : "-"}
+              </p>
+            )}
+          </div>
+
           <div className="flex gap-2">
             <button
               type="submit"
@@ -374,6 +411,13 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
             {lead.estimasi_nilai != null
               ? lead.estimasi_nilai.toLocaleString("id-ID")
               : "-"}
+          </dd>
+
+          <dt className="text-gray-500">Ditugaskan ke</dt>
+          <dd>
+            {profiles.find((p) => p.id === lead.assigned_to)
+              ? profileLabel(profiles.find((p) => p.id === lead.assigned_to)!)
+              : "Belum ditugaskan"}
           </dd>
 
           <dt className="text-gray-500">Status</dt>

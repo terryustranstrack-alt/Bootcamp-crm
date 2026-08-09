@@ -8,6 +8,12 @@ Aplikasi ini invite-only, tidak ada halaman signup. Untuk membuat akun:
 2. Klik **Add user** > **Create new user**, isi email & password.
 3. Bagikan kredensial itu ke user yang bersangkutan, mereka login di `/login`.
 
+User dengan `profiles.is_admin = true` (default: `admin@transtrack.id`, lihat
+`supabase/migrations/0006_sales_admin.sql`) bisa langsung menambah/menghapus
+akun Sales dari menu **Data Sales** di aplikasi tanpa perlu ke Supabase
+Dashboard — butuh `SUPABASE_SERVICE_ROLE_KEY` di `.env.local` (lihat
+`.env.local.example`).
+
 ## Getting Started
 
 First, run the development server:

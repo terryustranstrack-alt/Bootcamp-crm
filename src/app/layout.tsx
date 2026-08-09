@@ -26,6 +26,16 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  let isAdmin = false;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .single();
+    isAdmin = profile?.is_admin ?? false;
+  }
+
   return (
     <html
       lang="en"
@@ -34,7 +44,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         {user && (
           <header className="flex items-center justify-between border-b px-8 py-3 text-sm">
-            <NavMenu />
+            <NavMenu isAdmin={isAdmin} />
             <div className="flex items-center gap-4">
               <span className="text-gray-500">{user.email}</span>
               <form action={signOut}>

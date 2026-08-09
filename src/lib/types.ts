@@ -20,6 +20,8 @@ export type Lead = {
   catatan: string;
   produk: string | null;
   estimasi_nilai: number | null;
+  assigned_to: string | null;
+  created_by: string | null;
 };
 
 export type LeadActivityType = "status_change" | "note";
@@ -33,4 +35,13 @@ export type LeadActivity = {
   new_status: LeadStatus | null;
   created_at: string;
   created_by: string | null;
+};
+
+export type Profile = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  phone: string | null;
+  is_admin: boolean;
+  created_at: string;
 };

@@ -3,7 +3,10 @@
 import { useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useSumberOptions } from "@/lib/useSumberOptions";
+import { useProfiles, profileLabel } from "@/lib/useProfiles";
+import { useCurrentProfile } from "@/lib/useCurrentProfile";
 import SumberSelect from "@/components/SumberSelect";
+import AssigneeSelect from "@/components/AssigneeSelect";
 
 const supabase = createClient();
 
@@ -13,6 +16,7 @@ const EMPTY_FORM = {
   sumber: "",
   produk: "",
   estimasi_nilai: "",
+  assigned_to: "",
 };
 
 export default function LeadForm() {
@@ -24,6 +28,8 @@ export default function LeadForm() {
     null,
   );
   const sumberOptions = useSumberOptions();
+  const profiles = useProfiles();
+  const { profile: currentProfile } = useCurrentProfile();
 
   function updateKontak(kontak: string) {
     setForm({ ...form, kontak });
@@ -63,6 +69,9 @@ export default function LeadForm() {
       sumber: form.sumber || null,
       produk: form.produk || null,
       estimasi_nilai: form.estimasi_nilai ? Number(form.estimasi_nilai) : null,
+      assigned_to: currentProfile?.is_admin
+        ? form.assigned_to || null
+        : (currentProfile?.id ?? null),
     });
 
     setSubmitting(false);
@@ -142,6 +151,26 @@ export default function LeadForm() {
           onChange={(e) => setForm({ ...form, estimasi_nilai: e.target.value })}
           className="border rounded px-3 py-2"
         />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label htmlFor="assigned_to" className="text-sm font-medium">
+          Ditugaskan ke
+        </label>
+        {currentProfile?.is_admin ? (
+          <AssigneeSelect
+            id="assigned_to"
+            value={form.assigned_to || null}
+            onChange={(assigned_to) =>
+              setForm({ ...form, assigned_to: assigned_to ?? "" })
+            }
+            profiles={profiles}
+          />
+        ) : (
+          <p className="text-sm text-gray-500 px-3 py-2 border rounded bg-gray-50">
+            {currentProfile ? profileLabel(currentProfile) : "-"}
+          </p>
+        )}
       </div>
 
       {duplicateWarning && (

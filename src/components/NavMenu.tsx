@@ -9,12 +9,15 @@ const MENU = [
   { href: "/prospek", label: "Data Prospek" },
 ];
 
-export default function NavMenu() {
+const ADMIN_MENU = { href: "/sales", label: "Data Sales" };
+
+export default function NavMenu({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
+  const items = isAdmin ? [...MENU, ADMIN_MENU] : MENU;
 
   return (
     <nav className="flex gap-1">
-      {MENU.map((item) => {
+      {items.map((item) => {
         const active = pathname === item.href;
         return (
           <Link
