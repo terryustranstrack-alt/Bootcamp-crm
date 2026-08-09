@@ -10,6 +10,7 @@ import { useProfiles, profileLabel } from "@/lib/useProfiles";
 import { useCurrentProfile } from "@/lib/useCurrentProfile";
 import SumberSelect from "@/components/SumberSelect";
 import AssigneeSelect from "@/components/AssigneeSelect";
+import CurrencyInput from "@/components/CurrencyInput";
 import {
   LEAD_STATUSES,
   type Lead,
@@ -344,14 +345,11 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
             >
               Estimasi nilai transaksi
             </label>
-            <input
+            <CurrencyInput
               id="edit-estimasi_nilai"
-              type="number"
-              min="0"
-              step="any"
               value={editForm.estimasi_nilai}
-              onChange={(e) =>
-                setEditForm({ ...editForm, estimasi_nilai: e.target.value })
+              onChange={(estimasi_nilai) =>
+                setEditForm({ ...editForm, estimasi_nilai })
               }
               className="border rounded px-3 py-2"
             />

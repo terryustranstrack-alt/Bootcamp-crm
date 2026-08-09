@@ -132,6 +132,7 @@ export default function LeadBoard() {
   const [search, setSearch] = useState("");
   const [sumberFilter, setSumberFilter] = useState(SEMUA_SUMBER);
   const [assigneeFilter, setAssigneeFilter] = useState(SEMUA_ASSIGNEE);
+  const [followUpOnly, setFollowUpOnly] = useState(false);
   const profiles = useProfiles();
 
   async function loadLeads() {
@@ -209,9 +210,11 @@ export default function LeadBoard() {
         sumberFilter === SEMUA_SUMBER || lead.sumber === sumberFilter;
       const cocokAssignee =
         assigneeFilter === SEMUA_ASSIGNEE || lead.assigned_to === assigneeFilter;
-      return cocokPencarian && cocokSumber && cocokAssignee;
+      const cocokFollowUp =
+        !followUpOnly || needsFollowUp(lead.status, lead.tanggal_update);
+      return cocokPencarian && cocokSumber && cocokAssignee && cocokFollowUp;
     });
-  }, [leads, search, sumberFilter, assigneeFilter]);
+  }, [leads, search, sumberFilter, assigneeFilter, followUpOnly]);
 
   if (loading) return <p className="p-8">Memuat leads...</p>;
   if (error) return <p className="p-8 text-red-600">Gagal memuat: {error}</p>;
@@ -249,6 +252,14 @@ export default function LeadBoard() {
             </option>
           ))}
         </select>
+        <label className="flex items-center gap-2 border rounded px-3 py-2 text-sm">
+          <input
+            type="checkbox"
+            checked={followUpOnly}
+            onChange={(e) => setFollowUpOnly(e.target.checked)}
+          />
+          Perlu follow-up
+        </label>
       </div>
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <div className="flex gap-4 overflow-x-auto">

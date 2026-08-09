@@ -7,6 +7,7 @@ import { useProfiles, profileLabel } from "@/lib/useProfiles";
 import { useCurrentProfile } from "@/lib/useCurrentProfile";
 import SumberSelect from "@/components/SumberSelect";
 import AssigneeSelect from "@/components/AssigneeSelect";
+import CurrencyInput from "@/components/CurrencyInput";
 
 const supabase = createClient();
 
@@ -142,13 +143,10 @@ export default function LeadForm() {
         <label htmlFor="estimasi_nilai" className="text-sm font-medium">
           Estimasi nilai transaksi (opsional)
         </label>
-        <input
+        <CurrencyInput
           id="estimasi_nilai"
-          type="number"
-          min="0"
-          step="any"
           value={form.estimasi_nilai}
-          onChange={(e) => setForm({ ...form, estimasi_nilai: e.target.value })}
+          onChange={(estimasi_nilai) => setForm({ ...form, estimasi_nilai })}
           className="border rounded px-3 py-2"
         />
       </div>

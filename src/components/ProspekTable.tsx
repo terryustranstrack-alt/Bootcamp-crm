@@ -9,8 +9,18 @@ import { useProfiles, profileLabel } from "@/lib/useProfiles";
 import { useCurrentProfile } from "@/lib/useCurrentProfile";
 import SumberSelect from "@/components/SumberSelect";
 import AssigneeSelect from "@/components/AssigneeSelect";
+import CurrencyInput from "@/components/CurrencyInput";
 import { downloadCsv, leadsToCsv, parseLeadsCsv } from "@/lib/csv";
+import { needsFollowUp } from "@/lib/reminders";
 import { LEAD_STATUSES, type Lead, type LeadStatus } from "@/lib/types";
+
+function toLocalDateInputValue(iso: string): string {
+  const d = new Date(iso);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 const supabase = createClient();
 
@@ -28,6 +38,8 @@ export default function ProspekTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [followUpOnly, setFollowUpOnly] = useState(false);
+  const [filterDate, setFilterDate] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({
     nama: "",
@@ -67,9 +79,20 @@ export default function ProspekTable() {
 
   const filteredLeads = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return leads;
-    return leads.filter((lead) => lead.nama.toLowerCase().includes(q));
-  }, [leads, search]);
+    return leads.filter((lead) => {
+      if (q && !lead.nama.toLowerCase().includes(q)) return false;
+      if (followUpOnly && !needsFollowUp(lead.status, lead.tanggal_update)) {
+        return false;
+      }
+      if (
+        filterDate &&
+        toLocalDateInputValue(lead.tanggal_update) !== filterDate
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [leads, search, followUpOnly, filterDate]);
 
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -213,6 +236,29 @@ export default function ProspekTable() {
             placeholder="Cari nama..."
             className="border rounded px-3 py-2 text-sm w-64"
           />
+          <label className="flex items-center gap-2 border rounded px-3 py-2 text-sm">
+            <input
+              type="checkbox"
+              checked={followUpOnly}
+              onChange={(e) => setFollowUpOnly(e.target.checked)}
+            />
+            Perlu follow-up
+          </label>
+          <input
+            type="date"
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+            className="border rounded px-3 py-2 text-sm"
+          />
+          {filterDate && (
+            <button
+              type="button"
+              onClick={() => setFilterDate("")}
+              className="text-sm text-gray-500 hover:underline"
+            >
+              Hapus filter tanggal
+            </button>
+          )}
           <button
             type="button"
             onClick={() =>
@@ -316,15 +362,12 @@ export default function ProspekTable() {
                         />
                       </td>
                       <td className="p-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
+                        <CurrencyInput
                           value={editForm.estimasi_nilai}
-                          onChange={(e) =>
+                          onChange={(estimasi_nilai) =>
                             setEditForm({
                               ...editForm,
-                              estimasi_nilai: e.target.value,
+                              estimasi_nilai,
                             })
                           }
                           className="border rounded px-2 py-1 w-full"
