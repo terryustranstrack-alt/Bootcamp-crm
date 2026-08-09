@@ -21,3 +21,16 @@ export type Lead = {
   produk: string | null;
   estimasi_nilai: number | null;
 };
+
+export type LeadActivityType = "status_change" | "note";
+
+export type LeadActivity = {
+  id: string;
+  lead_id: string;
+  type: LeadActivityType;
+  content: string | null;
+  old_status: LeadStatus | null;
+  new_status: LeadStatus | null;
+  created_at: string;
+  created_by: string | null;
+};

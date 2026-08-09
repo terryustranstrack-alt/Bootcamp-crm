@@ -10,6 +10,9 @@ create table if not exists leads (
     check (status in ('Baru', 'Dihubungi', 'Tertarik', 'Nego', 'Closing', 'Hilang')),
   tanggal_masuk timestamptz not null default now(),
   tanggal_update timestamptz not null default now(),
+  -- Legacy: sebelum ada lead_activities, catatan disimpan di sini sebagai
+  -- teks yang di-concat manual. Kolom ini tidak ditulis lagi sejak Fase 2,
+  -- dipertahankan hanya untuk menampilkan data lama.
   catatan text not null default '',
   produk text,
   estimasi_nilai numeric
@@ -19,20 +22,51 @@ create table if not exists leads (
 -- bukan default-open di level project (anon key akan terlihat di browser).
 alter table leads enable row level security;
 
--- MVP ini belum ada login, jadi anon key perlu bisa baca & tulis tabel ini.
--- Tidak ada policy delete: MVP tidak punya fitur hapus lead.
-create policy "anon can read leads"
+-- Aplikasi punya login (lihat supabase/migrations/0002_auth_policies.sql),
+-- jadi hanya user yang sudah authenticated yang boleh baca/tulis tabel ini.
+create policy "authenticated can read leads"
   on leads for select
-  to anon
+  to authenticated
   using (true);
 
-create policy "anon can insert leads"
+create policy "authenticated can insert leads"
   on leads for insert
-  to anon
+  to authenticated
   with check (true);
 
-create policy "anon can update leads"
+create policy "authenticated can update leads"
   on leads for update
-  to anon
+  to authenticated
   using (true)
+  with check (true);
+
+-- Lihat supabase/migrations/0003_delete_policy.sql
+create policy "authenticated can delete leads"
+  on leads for delete
+  to authenticated
+  using (true);
+
+-- Lihat supabase/migrations/0004_lead_activities.sql
+-- Riwayat aktivitas per lead (perubahan status & catatan), append-only.
+create table if not exists lead_activities (
+  id uuid primary key default gen_random_uuid(),
+  lead_id uuid not null references leads(id) on delete cascade,
+  type text not null check (type in ('status_change', 'note')),
+  content text,
+  old_status text,
+  new_status text,
+  created_at timestamptz not null default now(),
+  created_by uuid references auth.users(id)
+);
+
+alter table lead_activities enable row level security;
+
+create policy "authenticated can read lead activities"
+  on lead_activities for select
+  to authenticated
+  using (true);
+
+create policy "authenticated can insert lead activities"
+  on lead_activities for insert
+  to authenticated
   with check (true);

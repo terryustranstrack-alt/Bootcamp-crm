@@ -1,5 +1,13 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Login
+
+Aplikasi ini invite-only, tidak ada halaman signup. Untuk membuat akun:
+
+1. Buka Supabase Dashboard project ini > **Authentication** > **Users**.
+2. Klik **Add user** > **Create new user**, isi email & password.
+3. Bagikan kredensial itu ke user yang bersangkutan, mereka login di `/login`.
+
 ## Getting Started
 
 First, run the development server:

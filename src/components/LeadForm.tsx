@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/client";
+import { useSumberOptions } from "@/lib/useSumberOptions";
+import SumberSelect from "@/components/SumberSelect";
+
+const supabase = createClient();
 
 const EMPTY_FORM = {
   nama: "",
@@ -16,12 +20,42 @@ export default function LeadForm() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(
+    null,
+  );
+  const sumberOptions = useSumberOptions();
+
+  function updateKontak(kontak: string) {
+    setForm({ ...form, kontak });
+    setDuplicateWarning(null);
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setSubmitting(true);
     setError(null);
     setSuccess(false);
+
+    if (!duplicateWarning) {
+      const { data: existing, error: cekError } = await supabase
+        .from("leads")
+        .select("nama")
+        .eq("kontak", form.kontak);
+
+      if (cekError) {
+        setError(cekError.message);
+        return;
+      }
+
+      if (existing && existing.length > 0) {
+        const namaLain = existing.map((l) => l.nama).join(", ");
+        setDuplicateWarning(
+          `Kontak ini sudah terdaftar atas nama: ${namaLain}. Klik "Tetap Simpan" untuk lanjut.`,
+        );
+        return;
+      }
+    }
+
+    setSubmitting(true);
 
     const { error } = await supabase.from("leads").insert({
       nama: form.nama,
@@ -39,6 +73,7 @@ export default function LeadForm() {
     }
 
     setForm(EMPTY_FORM);
+    setDuplicateWarning(null);
     setSuccess(true);
   }
 
@@ -65,7 +100,7 @@ export default function LeadForm() {
           id="kontak"
           required
           value={form.kontak}
-          onChange={(e) => setForm({ ...form, kontak: e.target.value })}
+          onChange={(e) => updateKontak(e.target.value)}
           className="border rounded px-3 py-2"
         />
       </div>
@@ -74,12 +109,11 @@ export default function LeadForm() {
         <label htmlFor="sumber" className="text-sm font-medium">
           Sumber
         </label>
-        <input
+        <SumberSelect
           id="sumber"
-          placeholder="Instagram Ads, Referral, Organik, ..."
           value={form.sumber}
-          onChange={(e) => setForm({ ...form, sumber: e.target.value })}
-          className="border rounded px-3 py-2"
+          onChange={(sumber) => setForm({ ...form, sumber })}
+          options={sumberOptions}
         />
       </div>
 
@@ -110,12 +144,20 @@ export default function LeadForm() {
         />
       </div>
 
+      {duplicateWarning && (
+        <p className="text-amber-600 text-sm">{duplicateWarning}</p>
+      )}
+
       <button
         type="submit"
         disabled={submitting}
         className="bg-black text-white rounded px-4 py-2 disabled:opacity-50"
       >
-        {submitting ? "Menyimpan..." : "Simpan Lead"}
+        {submitting
+          ? "Menyimpan..."
+          : duplicateWarning
+            ? "Tetap Simpan"
+            : "Simpan Lead"}
       </button>
 
       {success && (
