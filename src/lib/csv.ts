@@ -1,25 +1,35 @@
-import { LEAD_STATUSES, type Lead, type LeadStatus } from "@/lib/types";
+import {
+  leadStatusFromLabel,
+  leadStatusLabel,
+  type Lead,
+  type LeadStatus,
+} from "@/lib/types";
 
+// Daftar kolom CSV untuk fitur Export CSV di ProspekTable: header yang
+// muncul di file, dan cara mengambil nilainya dari satu baris Lead.
 const KOLOM: { header: string; value: (lead: Lead) => string }[] = [
-  { header: "Nama", value: (l) => l.nama },
-  { header: "Kontak", value: (l) => l.kontak },
-  { header: "Sumber", value: (l) => l.sumber ?? "" },
-  { header: "Status", value: (l) => l.status },
-  { header: "Produk", value: (l) => l.produk ?? "" },
+  { header: "Name", value: (lead) => lead.nama },
+  { header: "Contact", value: (lead) => lead.kontak },
+  { header: "Source", value: (lead) => lead.sumber ?? "" },
+  { header: "Status", value: (lead) => leadStatusLabel(lead.status) },
+  { header: "Product", value: (lead) => lead.produk ?? "" },
   {
-    header: "Estimasi Nilai",
-    value: (l) => (l.estimasi_nilai != null ? String(l.estimasi_nilai) : ""),
+    header: "Estimated Value",
+    value: (lead) =>
+      lead.estimasi_nilai != null ? String(lead.estimasi_nilai) : "",
   },
   {
-    header: "Tanggal Masuk",
-    value: (l) => new Date(l.tanggal_masuk).toLocaleString("id-ID"),
+    header: "Date Added",
+    value: (lead) => new Date(lead.tanggal_masuk).toLocaleString("id-ID"),
   },
   {
-    header: "Update Terakhir",
-    value: (l) => new Date(l.tanggal_update).toLocaleString("id-ID"),
+    header: "Last Updated",
+    value: (lead) => new Date(lead.tanggal_update).toLocaleString("id-ID"),
   },
 ];
 
+// Bungkus satu nilai kolom dengan tanda kutip kalau isinya mengandung
+// koma/kutip/baris baru, supaya tetap terbaca sebagai 1 kolom oleh Excel.
 function escapeCsvField(field: string): string {
   if (field.includes(",") || field.includes('"') || field.includes("\n")) {
     return `"${field.replace(/"/g, '""')}"`;
@@ -27,6 +37,7 @@ function escapeCsvField(field: string): string {
   return field;
 }
 
+// Ubah daftar lead jadi teks CSV siap didownload (dipakai tombol Export CSV).
 export function leadsToCsv(leads: Lead[]): string {
   const header = KOLOM.map((k) => escapeCsvField(k.header)).join(",");
   const rows = leads.map((lead) =>
@@ -35,6 +46,8 @@ export function leadsToCsv(leads: Lead[]): string {
   return [header, ...rows].join("\n");
 }
 
+// Trigger download file CSV lewat browser (bikin link sementara lalu klik
+// otomatis) — trik standar karena tidak ada API "save file" langsung.
 export function downloadCsv(filename: string, csv: string) {
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -54,81 +67,106 @@ export type NewLeadInput = {
   estimasi_nilai: number | null;
 };
 
+// Pecah satu baris teks CSV jadi array kolom, dengan menangani kutip ganda
+// (field yang di-escape lewat `escapeCsvField`). Parser CSV manual sederhana
+// karena tidak ada library CSV di project ini.
 function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = "";
-  let inQuotes = false;
+  const columns: string[] = [];
+  let currentColumn = "";
+  let insideQuotedField = false;
 
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
-    if (inQuotes) {
+    if (insideQuotedField) {
       if (char === '"') {
         if (line[i + 1] === '"') {
-          current += '"';
+          // Kutip ganda "" di dalam field artinya satu karakter kutip literal.
+          currentColumn += '"';
           i++;
         } else {
-          inQuotes = false;
+          insideQuotedField = false;
         }
       } else {
-        current += char;
+        currentColumn += char;
       }
     } else if (char === '"') {
-      inQuotes = true;
+      insideQuotedField = true;
     } else if (char === ",") {
-      result.push(current);
-      current = "";
+      columns.push(currentColumn);
+      currentColumn = "";
     } else {
-      current += char;
+      currentColumn += char;
     }
   }
-  result.push(current);
-  return result;
+  columns.push(currentColumn);
+  return columns;
+}
+
+// Cari index kolom dari daftar nama yang diterima — dicoba satu-satu
+// sampai ketemu. Dipakai supaya file CSV lama (header Bahasa Indonesia,
+// dari sebelum UI diterjemahkan) dan file baru (header Bahasa Inggris)
+// sama-sama bisa diimpor.
+function findColumnIndex(headerColumns: string[], candidates: string[]): number {
+  for (const candidate of candidates) {
+    const index = headerColumns.indexOf(candidate);
+    if (index >= 0) return index;
+  }
+  return -1;
 }
 
 /**
- * Mengenali kolom "Nama", "Kontak", "Sumber", "Status", "Produk",
- * "Estimasi Nilai" (urutan bebas, header lain diabaikan). Baris tanpa
- * nama/kontak dilewati. Tanggal masuk/update tidak diimpor, dibiarkan
- * default database (waktu import).
+ * Mengenali kolom "Name"/"Nama", "Contact"/"Kontak", "Source"/"Sumber",
+ * "Status", "Product"/"Produk", "Estimated Value"/"Estimasi Nilai" (urutan
+ * bebas, header lain diabaikan). Baris tanpa nama/kontak dilewati. Tanggal
+ * masuk/update tidak diimpor, dibiarkan default database (waktu import).
  */
 export function parseLeadsCsv(text: string): {
   rows: NewLeadInput[];
   skipped: number;
 } {
+  // Buang BOM (marker UTF-8) yang sering ditambahkan Excel di awal file.
   const cleaned = text.replace(/^﻿/, "");
   const lines = cleaned.split(/\r\n|\n/).filter((l) => l.trim().length > 0);
   if (lines.length === 0) return { rows: [], skipped: 0 };
 
-  const header = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
-  const idxNama = header.indexOf("nama");
-  const idxKontak = header.indexOf("kontak");
-  const idxSumber = header.indexOf("sumber");
-  const idxStatus = header.indexOf("status");
-  const idxProduk = header.indexOf("produk");
-  const idxEstimasi = header.findIndex((h) => h.startsWith("estimasi"));
+  // Cari posisi tiap kolom yang dikenali dari baris header (case-insensitive).
+  const headerColumns = parseCsvLine(lines[0]).map((h) =>
+    h.trim().toLowerCase(),
+  );
+  const namaColumnIndex = findColumnIndex(headerColumns, ["name", "nama"]);
+  const kontakColumnIndex = findColumnIndex(headerColumns, ["contact", "kontak"]);
+  const sumberColumnIndex = findColumnIndex(headerColumns, ["source", "sumber"]);
+  const statusColumnIndex = findColumnIndex(headerColumns, ["status"]);
+  const produkColumnIndex = findColumnIndex(headerColumns, ["product", "produk"]);
+  const estimasiColumnIndex = headerColumns.findIndex(
+    (h) => h.startsWith("estimated") || h.startsWith("estimasi"),
+  );
 
   const rows: NewLeadInput[] = [];
   let skipped = 0;
 
   for (const rawLine of lines.slice(1)) {
-    const cols = parseCsvLine(rawLine);
-    const nama = idxNama >= 0 ? cols[idxNama]?.trim() : "";
-    const kontak = idxKontak >= 0 ? cols[idxKontak]?.trim() : "";
+    const columns = parseCsvLine(rawLine);
+    const nama = namaColumnIndex >= 0 ? columns[namaColumnIndex]?.trim() : "";
+    const kontak =
+      kontakColumnIndex >= 0 ? columns[kontakColumnIndex]?.trim() : "";
 
     if (!nama || !kontak) {
       skipped++;
       continue;
     }
 
-    const statusRaw = idxStatus >= 0 ? cols[idxStatus]?.trim() : "";
-    const status = (LEAD_STATUSES as readonly string[]).includes(statusRaw)
-      ? (statusRaw as LeadStatus)
-      : "Baru";
+    const statusRaw =
+      statusColumnIndex >= 0 ? columns[statusColumnIndex]?.trim() : "";
+    const status = statusRaw ? leadStatusFromLabel(statusRaw) ?? "Baru" : "Baru";
 
-    const sumber = idxSumber >= 0 ? cols[idxSumber]?.trim() || null : null;
-    const produk = idxProduk >= 0 ? cols[idxProduk]?.trim() || null : null;
+    const sumber =
+      sumberColumnIndex >= 0 ? columns[sumberColumnIndex]?.trim() || null : null;
+    const produk =
+      produkColumnIndex >= 0 ? columns[produkColumnIndex]?.trim() || null : null;
 
-    const estimasiRaw = idxEstimasi >= 0 ? cols[idxEstimasi]?.trim() : "";
+    const estimasiRaw =
+      estimasiColumnIndex >= 0 ? columns[estimasiColumnIndex]?.trim() : "";
     const estimasiParsed = estimasiRaw
       ? Number(estimasiRaw.replace(/[^0-9.-]/g, ""))
       : NaN;

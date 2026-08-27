@@ -3,6 +3,10 @@ import type { LeadStatus } from "@/lib/types";
 
 type SupabaseBrowserClient = ReturnType<typeof createClient>;
 
+// Catat satu baris riwayat di tabel `lead_activities` setiap kali status
+// sebuah lead berubah (mis. "Baru" -> "Dihubungi"). Dipakai di
+// LeadDetail/LeadBoard/ProspekTable setiap kali user ganti dropdown status.
+// Return: pesan error kalau gagal simpan, atau null kalau berhasil.
 export async function logStatusChange(
   supabase: SupabaseBrowserClient,
   leadId: string,
@@ -24,6 +28,10 @@ export async function logStatusChange(
   return error?.message ?? null;
 }
 
+// Catat satu baris riwayat berisi catatan bebas (teks) untuk sebuah lead —
+// dipakai baik untuk catatan manual dari sales maupun ringkasan otomatis
+// "Lead data updated: ..." saat form edit disimpan.
+// Return: pesan error kalau gagal simpan, atau null kalau berhasil.
 export async function logNote(
   supabase: SupabaseBrowserClient,
   leadId: string,

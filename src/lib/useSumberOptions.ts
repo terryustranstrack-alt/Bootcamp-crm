@@ -7,13 +7,16 @@ const DEFAULT_SUMBER = [
   "Instagram Ads",
   "Facebook Ads",
   "Referral",
-  "Organik",
+  "Organic",
   "Website",
   "WhatsApp",
 ];
 
 const supabase = createClient();
 
+// Daftar pilihan "Sumber" (asal lead) untuk dropdown SumberSelect: gabungan
+// dari daftar default di atas + nilai-nilai unik yang sudah pernah dipakai
+// di tabel leads (mis. hasil import CSV atau input custom "Lainnya").
 export function useSumberOptions() {
   const [options, setOptions] = useState<string[]>(DEFAULT_SUMBER);
 
@@ -22,10 +25,12 @@ export function useSumberOptions() {
       const { data } = await supabase.from("leads").select("sumber");
       if (!data) return;
 
-      const existing = data
+      const sumberYangSudahDipakai = data
         .map((row) => row.sumber)
-        .filter((s): s is string => !!s);
-      const merged = Array.from(new Set([...DEFAULT_SUMBER, ...existing])).sort();
+        .filter((sumber): sumber is string => !!sumber);
+      const merged = Array.from(
+        new Set([...DEFAULT_SUMBER, ...sumberYangSudahDipakai]),
+      ).sort();
       setOptions(merged);
     }
     load();

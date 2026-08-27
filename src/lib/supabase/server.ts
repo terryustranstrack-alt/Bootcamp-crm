@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
+// Client Supabase untuk dipakai di sisi server (Server Component/Server
+// Action). Sesi login dibaca/ditulis lewat cookie request saat ini.
 export async function createClient() {
   const cookieStore = await cookies();
 

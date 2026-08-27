@@ -3,6 +3,10 @@
 import { profileLabel } from "@/lib/useProfiles";
 import type { Profile } from "@/lib/types";
 
+// Dropdown pilih sales penanggung jawab sebuah lead. `value` null berarti
+// "Unassigned". Hanya dipakai untuk admin — sales non-admin tidak
+// boleh ganti assignee (lihat pengecekan currentProfile?.is_admin di
+// pemanggilnya: LeadForm, LeadDetail, ProspekTable).
 export default function AssigneeSelect({
   value,
   onChange,
@@ -21,10 +25,10 @@ export default function AssigneeSelect({
       onChange={(e) => onChange(e.target.value || null)}
       className="border rounded px-3 py-2"
     >
-      <option value="">Belum ditugaskan</option>
-      {profiles.map((p) => (
-        <option key={p.id} value={p.id}>
-          {profileLabel(p)}
+      <option value="">Unassigned</option>
+      {profiles.map((profile) => (
+        <option key={profile.id} value={profile.id}>
+          {profileLabel(profile)}
         </option>
       ))}
     </select>

@@ -12,8 +12,17 @@ import AssigneeSelect from "@/components/AssigneeSelect";
 import CurrencyInput from "@/components/CurrencyInput";
 import { downloadCsv, leadsToCsv, parseLeadsCsv } from "@/lib/csv";
 import { needsFollowUp } from "@/lib/reminders";
-import { LEAD_STATUSES, type Lead, type LeadStatus } from "@/lib/types";
+import {
+  LEAD_STATUSES,
+  leadStatusLabel,
+  type Lead,
+  type LeadStatus,
+} from "@/lib/types";
 
+// Ubah timestamp ISO jadi format "YYYY-MM-DD" versi waktu lokal browser,
+// supaya bisa dicocokkan dengan nilai <input type="date"> (filter tanggal).
+// Tidak pakai iso.slice(0, 10) karena itu tanggal UTC, bisa beda hari
+// dengan tanggal lokal pengguna.
 function toLocalDateInputValue(iso: string): string {
   const d = new Date(iso);
   const year = d.getFullYear();
@@ -33,6 +42,8 @@ type EditForm = {
   assigned_to: string;
 };
 
+// Halaman "Prospects": tabel semua lead dengan pencarian, filter
+// follow-up/tanggal, edit inline per baris, serta export/import CSV.
 export default function ProspekTable() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,10 +88,13 @@ export default function ProspekTable() {
     loadLeads();
   }, []);
 
+  // Terapkan pencarian nama + filter follow-up + filter tanggal sekaligus
+  // ke daftar lead. Dihitung ulang otomatis tiap kali salah satu filter
+  // berubah (useMemo).
   const filteredLeads = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const keyword = search.trim().toLowerCase();
     return leads.filter((lead) => {
-      if (q && !lead.nama.toLowerCase().includes(q)) return false;
+      if (keyword && !lead.nama.toLowerCase().includes(keyword)) return false;
       if (followUpOnly && !needsFollowUp(lead.status, lead.tanggal_update)) {
         return false;
       }
@@ -94,6 +108,8 @@ export default function ProspekTable() {
     });
   }, [leads, search, followUpOnly, filterDate]);
 
+  // Baca file CSV yang dipilih user, parse jadi baris-baris lead lewat
+  // parseLeadsCsv, lalu insert semuanya sekaligus ke database.
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -107,7 +123,7 @@ export default function ProspekTable() {
 
     if (rows.length === 0) {
       setImportMessage(
-        `Tidak ada baris valid untuk diimpor (${skipped} baris dilewati karena nama/kontak kosong).`,
+        `No valid rows to import (${skipped} row(s) skipped due to missing name/contact).`,
       );
       setImporting(false);
       return;
@@ -123,8 +139,8 @@ export default function ProspekTable() {
     }
 
     setImportMessage(
-      `${rows.length} prospek berhasil diimpor` +
-        (skipped > 0 ? `, ${skipped} baris dilewati.` : "."),
+      `${rows.length} prospect(s) imported successfully` +
+        (skipped > 0 ? `, ${skipped} row(s) skipped.` : "."),
     );
     loadLeads();
   }
@@ -164,6 +180,9 @@ export default function ProspekTable() {
     loadLeads();
   }
 
+  // Simpan perubahan dari form edit baris ini. Sama seperti LeadDetail:
+  // field yang benar-benar berubah (`perubahan`) dicatat ke riwayat
+  // aktivitas sebagai ringkasan.
   async function handleSaveEdit(lead: Lead) {
     setSaving(true);
 
@@ -179,11 +198,11 @@ export default function ProspekTable() {
       : lead.assigned_to;
 
     const perubahan: string[] = [];
-    if (editForm.nama !== lead.nama) perubahan.push("nama");
-    if (editForm.kontak !== lead.kontak) perubahan.push("kontak");
-    if (sumberBaru !== lead.sumber) perubahan.push("sumber");
-    if (produkBaru !== lead.produk) perubahan.push("produk");
-    if (estimasiBaru !== lead.estimasi_nilai) perubahan.push("estimasi nilai");
+    if (editForm.nama !== lead.nama) perubahan.push("name");
+    if (editForm.kontak !== lead.kontak) perubahan.push("contact");
+    if (sumberBaru !== lead.sumber) perubahan.push("source");
+    if (produkBaru !== lead.produk) perubahan.push("product");
+    if (estimasiBaru !== lead.estimasi_nilai) perubahan.push("estimated value");
     if (currentProfile?.is_admin && assignedToBaru !== lead.assigned_to) {
       perubahan.push("assignee");
     }
@@ -211,7 +230,7 @@ export default function ProspekTable() {
       const activityError = await logNote(
         supabase,
         lead.id,
-        `Data lead diperbarui: ${perubahan.join(", ")}.`,
+        `Lead data updated: ${perubahan.join(", ")}.`,
       );
       if (activityError) setError(activityError);
     }
@@ -221,19 +240,19 @@ export default function ProspekTable() {
     loadLeads();
   }
 
-  if (loading) return <p className="p-8">Memuat data prospek...</p>;
-  if (error) return <p className="p-8 text-red-600">Gagal memuat: {error}</p>;
+  if (loading) return <p className="p-8">Loading prospects...</p>;
+  if (error) return <p className="p-8 text-red-600">Failed to load: {error}</p>;
 
   return (
     <main className="p-8 flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Data Prospek</h1>
+        <h1 className="text-xl font-semibold">Prospects</h1>
         <div className="flex flex-wrap gap-3">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari nama..."
+            placeholder="Search name..."
             className="border rounded px-3 py-2 text-sm w-64"
           />
           <label className="flex items-center gap-2 border rounded px-3 py-2 text-sm">
@@ -242,7 +261,7 @@ export default function ProspekTable() {
               checked={followUpOnly}
               onChange={(e) => setFollowUpOnly(e.target.checked)}
             />
-            Perlu follow-up
+            Needs follow-up
           </label>
           <input
             type="date"
@@ -256,7 +275,7 @@ export default function ProspekTable() {
               onClick={() => setFilterDate("")}
               className="text-sm text-gray-500 hover:underline"
             >
-              Hapus filter tanggal
+              Clear date filter
             </button>
           )}
           <button
@@ -281,7 +300,7 @@ export default function ProspekTable() {
             disabled={importing}
             className="border rounded px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
           >
-            {importing ? "Mengimpor..." : "Import CSV"}
+            {importing ? "Importing..." : "Import CSV"}
           </button>
         </div>
       </div>
@@ -294,22 +313,22 @@ export default function ProspekTable() {
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="bg-gray-50 border-b text-left">
-              <th className="p-2">Nama</th>
-              <th className="p-2">Kontak</th>
-              <th className="p-2">Sumber</th>
-              <th className="p-2">Produk</th>
-              <th className="p-2">Estimasi Nilai</th>
+              <th className="p-2">Name</th>
+              <th className="p-2">Contact</th>
+              <th className="p-2">Source</th>
+              <th className="p-2">Product</th>
+              <th className="p-2">Estimated Value</th>
               <th className="p-2">Assignee</th>
               <th className="p-2">Status</th>
-              <th className="p-2">Update Terakhir</th>
-              <th className="p-2">Aksi</th>
+              <th className="p-2">Last Updated</th>
+              <th className="p-2">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredLeads.length === 0 && (
               <tr>
                 <td colSpan={9} className="p-4 text-center text-gray-500">
-                  Tidak ada prospek yang cocok.
+                  No matching prospects.
                 </td>
               </tr>
             )}
@@ -434,7 +453,7 @@ export default function ProspekTable() {
                     >
                       {LEAD_STATUSES.map((s) => (
                         <option key={s} value={s}>
-                          {s}
+                          {leadStatusLabel(s)}
                         </option>
                       ))}
                     </select>
@@ -451,7 +470,7 @@ export default function ProspekTable() {
                           disabled={saving}
                           className="bg-black text-white rounded px-2 py-1 text-xs disabled:opacity-50"
                         >
-                          {saving ? "Menyimpan..." : "Simpan"}
+                          {saving ? "Saving..." : "Save"}
                         </button>
                         <button
                           type="button"
@@ -459,7 +478,7 @@ export default function ProspekTable() {
                           disabled={saving}
                           className="border rounded px-2 py-1 text-xs hover:bg-gray-50"
                         >
-                          Batal
+                          Cancel
                         </button>
                       </div>
                     ) : (

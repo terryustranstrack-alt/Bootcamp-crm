@@ -1,8 +1,10 @@
 import Link from "next/link";
 import LeadForm from "@/components/LeadForm";
 
+// force-dynamic: form ini butuh data live (opsi sumber/assignee terbaru), jangan di-cache.
 export const dynamic = "force-dynamic";
 
+// Halaman "Add New Lead" di URL "/leads/baru".
 export default function TambahLeadPage() {
   return (
     <main className="p-8">
@@ -10,9 +12,9 @@ export default function TambahLeadPage() {
         href="/"
         className="text-sm text-gray-500 hover:underline inline-block mb-4"
       >
-        ← Kembali ke Board
+        ← Back to Board
       </Link>
-      <h1 className="text-xl font-semibold mb-6">Tambah Lead Baru</h1>
+      <h1 className="text-xl font-semibold mb-6">Add New Lead</h1>
       <LeadForm />
     </main>
   );

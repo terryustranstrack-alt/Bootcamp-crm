@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { LEAD_STATUSES, type Lead } from "@/lib/types";
+import { LEAD_STATUSES, leadStatusLabel, type Lead } from "@/lib/types";
 
 const supabase = createClient();
 const SATU_MINGGU_MS = 7 * 24 * 60 * 60 * 1000;
@@ -11,6 +11,8 @@ function formatRupiah(n: number) {
   return n.toLocaleString("id-ID", { style: "currency", currency: "IDR" });
 }
 
+// Halaman ringkasan performa: total lead, conversion rate, lead masuk
+// minggu ini, nilai closing, dan grafik batang distribusi lead per status.
 export default function Dashboard() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,27 +35,35 @@ export default function Dashboard() {
 
   const stats = useMemo(() => {
     const totalLeads = leads.length;
+    // Jumlah lead + total estimasi nilainya, dikelompokkan per status —
+    // dipakai untuk grafik batang "Distribusi Pipeline".
     const perStatus = LEAD_STATUSES.map((status) => {
-      const leadsInStatus = leads.filter((l) => l.status === status);
+      const leadsInStatus = leads.filter((lead) => lead.status === status);
       const totalNilai = leadsInStatus.reduce(
-        (sum, l) => sum + (l.estimasi_nilai ?? 0),
+        (sum, lead) => sum + (lead.estimasi_nilai ?? 0),
         0,
       );
       return { status, count: leadsInStatus.length, totalNilai };
     });
 
-    const closingCount = perStatus.find((p) => p.status === "Closing")?.count ?? 0;
+    const closingCount =
+      perStatus.find((statusGroup) => statusGroup.status === "Closing")
+        ?.count ?? 0;
     const conversionRate = totalLeads > 0 ? (closingCount / totalLeads) * 100 : 0;
 
     const leadsMingguIni = leads.filter(
-      (l) => now - new Date(l.tanggal_masuk).getTime() <= SATU_MINGGU_MS,
+      (lead) => now - new Date(lead.tanggal_masuk).getTime() <= SATU_MINGGU_MS,
     ).length;
 
+    // Total estimasi nilai dari lead yang masih "hidup" (belum closing,
+    // belum hilang) — potensi revenue yang belum terealisasi.
     const pipelineAktif = leads
-      .filter((l) => l.status !== "Closing" && l.status !== "Hilang")
-      .reduce((sum, l) => sum + (l.estimasi_nilai ?? 0), 0);
+      .filter((lead) => lead.status !== "Closing" && lead.status !== "Hilang")
+      .reduce((sum, lead) => sum + (lead.estimasi_nilai ?? 0), 0);
 
-    const nilaiClosing = perStatus.find((p) => p.status === "Closing")?.totalNilai ?? 0;
+    const nilaiClosing =
+      perStatus.find((statusGroup) => statusGroup.status === "Closing")
+        ?.totalNilai ?? 0;
 
     return {
       totalLeads,
@@ -65,10 +75,16 @@ export default function Dashboard() {
     };
   }, [leads, now]);
 
-  if (loading) return <p className="p-8">Memuat dashboard...</p>;
-  if (error) return <p className="p-8 text-red-600">Gagal memuat: {error}</p>;
+  if (loading) return <p className="p-8">Loading dashboard...</p>;
+  if (error) return <p className="p-8 text-red-600">Failed to load: {error}</p>;
 
-  const maxCount = Math.max(1, ...stats.perStatus.map((p) => p.count));
+  // Dipakai sebagai penyebut supaya lebar batang grafik proporsional
+  // (status dengan lead terbanyak = 100% lebar). Minimal 1 supaya tidak
+  // pernah dibagi nol saat semua status masih kosong.
+  const maxCount = Math.max(
+    1,
+    ...stats.perStatus.map((statusGroup) => statusGroup.count),
+  );
 
   return (
     <main className="p-8 flex flex-col gap-6 max-w-3xl">
@@ -86,11 +102,11 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="border rounded p-4">
-          <p className="text-xs text-gray-500">Lead Masuk Minggu Ini</p>
+          <p className="text-xs text-gray-500">New Leads This Week</p>
           <p className="text-2xl font-semibold">{stats.leadsMingguIni}</p>
         </div>
         <div className="border rounded p-4">
-          <p className="text-xs text-gray-500">Nilai Closing</p>
+          <p className="text-xs text-gray-500">Won Value</p>
           <p className="text-2xl font-semibold">
             {formatRupiah(stats.nilaiClosing)}
           </p>
@@ -99,21 +115,21 @@ export default function Dashboard() {
 
       <div>
         <h2 className="font-medium mb-3">
-          Distribusi Pipeline (potensi aktif: {formatRupiah(stats.pipelineAktif)})
+          Pipeline Distribution (active potential: {formatRupiah(stats.pipelineAktif)})
         </h2>
         <div className="flex flex-col gap-3">
-          {stats.perStatus.map((p) => (
-            <div key={p.status}>
+          {stats.perStatus.map((statusGroup) => (
+            <div key={statusGroup.status}>
               <div className="flex justify-between text-sm mb-1">
-                <span>{p.status}</span>
+                <span>{leadStatusLabel(statusGroup.status)}</span>
                 <span className="text-gray-500">
-                  {p.count} lead · {formatRupiah(p.totalNilai)}
+                  {statusGroup.count} lead · {formatRupiah(statusGroup.totalNilai)}
                 </span>
               </div>
               <div className="h-2 bg-gray-100 rounded">
                 <div
                   className="h-2 bg-black rounded"
-                  style={{ width: `${(p.count / maxCount) * 100}%` }}
+                  style={{ width: `${(statusGroup.count / maxCount) * 100}%` }}
                 />
               </div>
             </div>

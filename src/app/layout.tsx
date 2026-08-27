@@ -17,15 +17,19 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "CRM Lead Tracker",
-  description: "Monitor progress leads penjualan.",
+  description: "Track sales lead progress.",
 };
 
+// Layout dasar semua halaman: header dengan menu navigasi + info user +
+// tombol keluar (hanya muncul kalau sudah login), lalu isi halamannya.
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Perlu tahu status admin di sini supaya NavMenu bisa memunculkan/
+  // menyembunyikan menu "Sales" (khusus admin).
   let isAdmin = false;
   if (user) {
     const { data: profile } = await supabase
@@ -52,7 +56,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                   type="submit"
                   className="text-gray-500 hover:underline"
                 >
-                  Keluar
+                  Log Out
                 </button>
               </form>
             </div>

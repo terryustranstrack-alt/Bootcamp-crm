@@ -5,12 +5,17 @@ import { usePathname } from "next/navigation";
 
 const MENU = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/", label: "CRM" },
-  { href: "/prospek", label: "Data Prospek" },
+  { href: "/", label: "Board" },
+  { href: "/prospek", label: "Prospects" },
+  { href: "/inbox", label: "Inbox" },
 ];
 
-const ADMIN_MENU = { href: "/sales", label: "Data Sales" };
+// Menu "Sales" cuma muncul untuk admin — sales biasa tidak punya akses
+// untuk lihat/kelola akun sales lain.
+const ADMIN_MENU = { href: "/sales", label: "Sales" };
 
+// Navigasi bar di header, disembunyikan otomatis kalau belum login (lihat
+// layout.tsx: NavMenu hanya dirender saat `user` ada).
 export default function NavMenu({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
   const items = isAdmin ? [...MENU, ADMIN_MENU] : MENU;

@@ -13,6 +13,7 @@ import AssigneeSelect from "@/components/AssigneeSelect";
 import CurrencyInput from "@/components/CurrencyInput";
 import {
   LEAD_STATUSES,
+  leadStatusLabel,
   type Lead,
   type LeadActivity,
   type LeadStatus,
@@ -20,6 +21,9 @@ import {
 
 const supabase = createClient();
 
+// Halaman detail satu lead: tampilkan datanya, izinkan edit/hapus/ganti
+// status, dan tampilkan + tambah riwayat aktivitas (catatan & histori
+// perubahan status).
 export default function LeadDetail({ leadId }: { leadId: string }) {
   const router = useRouter();
   const [lead, setLead] = useState<Lead | null>(null);
@@ -43,6 +47,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
   const sumberOptions = useSumberOptions();
   const profiles = useProfiles();
   const { profile: currentProfile } = useCurrentProfile();
+  const [hasWaConversation, setHasWaConversation] = useState(false);
 
   async function loadLead() {
     const { data, error } = await supabase
@@ -72,13 +77,28 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
     }
   }
 
+  // Cek apakah lead ini punya percakapan WhatsApp terhubung, supaya bisa
+  // tampilkan link pintasan "View in Inbox".
+  async function loadWaConversation() {
+    const { data } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("lead_id", leadId)
+      .maybeSingle();
+    setHasWaConversation(!!data);
+  }
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadLead();
     loadActivities();
+    loadWaConversation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadId]);
 
+  // Ganti status lead (dropdown di halaman) — update datanya lalu catat
+  // perubahan ke riwayat aktivitas supaya bisa dilihat kapan/oleh apa
+  // statusnya berubah.
   async function handleStatusChange(status: LeadStatus) {
     if (!lead) return;
     const oldStatus = lead.status;
@@ -105,6 +125,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
     loadActivities();
   }
 
+  // Tambah catatan bebas ke riwayat aktivitas (form "Add Note").
   async function handleAddCatatan(e: FormEvent) {
     e.preventDefault();
     if (!lead || !catatanBaru.trim()) return;
@@ -137,6 +158,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
     loadActivities();
   }
 
+  // Isi form edit dengan data lead saat ini, lalu buka mode edit.
   function startEdit() {
     if (!lead) return;
     setEditForm({
@@ -151,6 +173,10 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
     setIsEditing(true);
   }
 
+  // Simpan perubahan dari form edit. Selain update baris lead-nya, dicatat
+  // juga daftar field mana saja yang benar-benar berubah (`perubahan`),
+  // supaya riwayat aktivitas menunjukkan ringkasan yang berguna
+  // ("Lead data updated: name, product.") bukan cuma "diedit".
   async function handleSaveEdit(e: FormEvent) {
     e.preventDefault();
     if (!lead) return;
@@ -163,11 +189,11 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
       : null;
 
     const perubahan: string[] = [];
-    if (editForm.nama !== lead.nama) perubahan.push("nama");
-    if (editForm.kontak !== lead.kontak) perubahan.push("kontak");
-    if (sumberBaru !== lead.sumber) perubahan.push("sumber");
-    if (produkBaru !== lead.produk) perubahan.push("produk");
-    if (estimasiBaru !== lead.estimasi_nilai) perubahan.push("estimasi nilai");
+    if (editForm.nama !== lead.nama) perubahan.push("name");
+    if (editForm.kontak !== lead.kontak) perubahan.push("contact");
+    if (sumberBaru !== lead.sumber) perubahan.push("source");
+    if (produkBaru !== lead.produk) perubahan.push("product");
+    if (estimasiBaru !== lead.estimasi_nilai) perubahan.push("estimated value");
 
     // Non-admin (sales) tidak boleh ubah assignee — lead tetap milik mereka
     // sendiri (assigned_to/created_by), lihat migration 0007.
@@ -201,7 +227,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
       const activityError = await logNote(
         supabase,
         leadId,
-        `Data lead diperbarui: ${perubahan.join(", ")}.`,
+        `Lead data updated: ${perubahan.join(", ")}.`,
       );
       if (activityError) setError(activityError);
     }
@@ -212,6 +238,10 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
     loadActivities();
   }
 
+  // Hapus lead — pakai pola "klik dua kali untuk konfirmasi": klik pertama
+  // cuma ubah teks tombol jadi "Confirm delete?", klik kedua baru benar-benar
+  // menghapus. Kalau tombol kehilangan fokus (onBlur di JSX di bawah),
+  // konfirmasi dibatalkan lagi supaya tidak ke-klik tidak sengaja nanti.
   async function handleDelete() {
     if (!confirmDelete) {
       setConfirmDelete(true);
@@ -229,9 +259,9 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
     router.push("/");
   }
 
-  if (loading) return <p className="p-8">Memuat lead...</p>;
-  if (error) return <p className="p-8 text-red-600">Gagal memuat: {error}</p>;
-  if (!lead) return <p className="p-8">Lead tidak ditemukan.</p>;
+  if (loading) return <p className="p-8">Loading lead...</p>;
+  if (error) return <p className="p-8 text-red-600">Failed to load: {error}</p>;
+  if (!lead) return <p className="p-8">Lead not found.</p>;
 
   return (
     <main className="p-8 max-w-2xl flex flex-col gap-6">
@@ -239,17 +269,25 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
         href="/"
         className="text-sm text-gray-500 hover:underline self-start"
       >
-        ← Kembali ke Board
+        ← Back to Board
       </Link>
 
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">{lead.nama}</h1>
           <p className="text-sm text-gray-500">
-            Masuk: {new Date(lead.tanggal_masuk).toLocaleString("id-ID")} ·
-            Update terakhir:{" "}
+            Added: {new Date(lead.tanggal_masuk).toLocaleString("id-ID")} ·
+            Last updated:{" "}
             {new Date(lead.tanggal_update).toLocaleString("id-ID")}
           </p>
+          {hasWaConversation && (
+            <Link
+              href="/inbox"
+              className="text-sm text-green-700 hover:underline"
+            >
+              💬 Has a WhatsApp conversation — View in Inbox
+            </Link>
+          )}
         </div>
         <div className="flex shrink-0 gap-2">
           {!isEditing && (
@@ -269,10 +307,10 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
             className="text-sm text-red-600 border border-red-600 rounded px-3 py-1.5 hover:bg-red-50 disabled:opacity-50"
           >
             {deleting
-              ? "Menghapus..."
+              ? "Deleting..."
               : confirmDelete
-                ? "Yakin hapus?"
-                : "Hapus Lead"}
+                ? "Confirm delete?"
+                : "Delete Lead"}
           </button>
         </div>
       </div>
@@ -284,7 +322,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
         >
           <div className="flex flex-col gap-1">
             <label htmlFor="edit-nama" className="text-sm font-medium">
-              Nama
+              Name
             </label>
             <input
               id="edit-nama"
@@ -299,7 +337,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
 
           <div className="flex flex-col gap-1">
             <label htmlFor="edit-kontak" className="text-sm font-medium">
-              Kontak (nomor WA/telepon)
+              Contact (WhatsApp/phone number)
             </label>
             <input
               id="edit-kontak"
@@ -314,7 +352,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
 
           <div className="flex flex-col gap-1">
             <label htmlFor="edit-sumber" className="text-sm font-medium">
-              Sumber
+              Source
             </label>
             <SumberSelect
               id="edit-sumber"
@@ -326,7 +364,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
 
           <div className="flex flex-col gap-1">
             <label htmlFor="edit-produk" className="text-sm font-medium">
-              Produk/kebutuhan
+              Product/need
             </label>
             <input
               id="edit-produk"
@@ -343,7 +381,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               htmlFor="edit-estimasi_nilai"
               className="text-sm font-medium"
             >
-              Estimasi nilai transaksi
+              Estimated deal value
             </label>
             <CurrencyInput
               id="edit-estimasi_nilai"
@@ -357,7 +395,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
 
           <div className="flex flex-col gap-1">
             <label htmlFor="edit-assigned_to" className="text-sm font-medium">
-              Ditugaskan ke
+              Assigned to
             </label>
             {currentProfile?.is_admin ? (
               <AssigneeSelect
@@ -381,7 +419,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               disabled={saving}
               className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
             >
-              {saving ? "Menyimpan..." : "Simpan Perubahan"}
+              {saving ? "Saving..." : "Save Changes"}
             </button>
             <button
               type="button"
@@ -389,33 +427,33 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               disabled={saving}
               className="border rounded px-4 py-2 text-sm hover:bg-gray-50"
             >
-              Batal
+              Cancel
             </button>
           </div>
         </form>
       ) : (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-          <dt className="text-gray-500">Kontak</dt>
+          <dt className="text-gray-500">Contact</dt>
           <dd>{lead.kontak}</dd>
 
-          <dt className="text-gray-500">Sumber</dt>
+          <dt className="text-gray-500">Source</dt>
           <dd>{lead.sumber || "-"}</dd>
 
-          <dt className="text-gray-500">Produk/kebutuhan</dt>
+          <dt className="text-gray-500">Product/need</dt>
           <dd>{lead.produk || "-"}</dd>
 
-          <dt className="text-gray-500">Estimasi nilai</dt>
+          <dt className="text-gray-500">Estimated value</dt>
           <dd>
             {lead.estimasi_nilai != null
               ? lead.estimasi_nilai.toLocaleString("id-ID")
               : "-"}
           </dd>
 
-          <dt className="text-gray-500">Ditugaskan ke</dt>
+          <dt className="text-gray-500">Assigned to</dt>
           <dd>
             {profiles.find((p) => p.id === lead.assigned_to)
               ? profileLabel(profiles.find((p) => p.id === lead.assigned_to)!)
-              : "Belum ditugaskan"}
+              : "Unassigned"}
           </dd>
 
           <dt className="text-gray-500">Status</dt>
@@ -429,7 +467,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
             >
               {LEAD_STATUSES.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {leadStatusLabel(s)}
                 </option>
               ))}
             </select>
@@ -438,12 +476,12 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
       )}
 
       <div>
-        <h2 className="font-medium mb-2">Riwayat aktivitas</h2>
+        <h2 className="font-medium mb-2">Activity history</h2>
         <form onSubmit={handleAddCatatan} className="flex flex-col gap-2 mb-4">
           <textarea
             value={catatanBaru}
             onChange={(e) => setCatatanBaru(e.target.value)}
-            placeholder="Tambah catatan baru..."
+            placeholder="Add a new note..."
             className="border rounded px-3 py-2 text-sm"
             rows={3}
           />
@@ -452,14 +490,14 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
             disabled={submitting || !catatanBaru.trim()}
             className="self-start bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
           >
-            {submitting ? "Menyimpan..." : "Tambah Catatan"}
+            {submitting ? "Saving..." : "Add Note"}
           </button>
         </form>
 
         {lead.catatan && (
           <div className="mb-4">
             <p className="text-xs text-gray-500 mb-1">
-              Catatan lama (sebelum fitur riwayat aktivitas)
+              Old note (before activity history was added)
             </p>
             <pre className="whitespace-pre-wrap text-sm bg-gray-50 border rounded p-3">
               {lead.catatan}
@@ -469,7 +507,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
 
         <ul className="flex flex-col gap-3">
           {activities.length === 0 && (
-            <li className="text-sm text-gray-500">Belum ada aktivitas.</li>
+            <li className="text-sm text-gray-500">No activity yet.</li>
           )}
           {activities.map((activity) => (
             <li
@@ -481,10 +519,14 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               </p>
               {activity.type === "status_change" ? (
                 <p>
-                  Status diubah dari{" "}
-                  <span className="font-medium">{activity.old_status}</span>{" "}
-                  ke{" "}
-                  <span className="font-medium">{activity.new_status}</span>
+                  Status changed from{" "}
+                  <span className="font-medium">
+                    {activity.old_status ? leadStatusLabel(activity.old_status) : "-"}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-medium">
+                    {activity.new_status ? leadStatusLabel(activity.new_status) : "-"}
+                  </span>
                 </p>
               ) : (
                 <p className="whitespace-pre-wrap">{activity.content}</p>

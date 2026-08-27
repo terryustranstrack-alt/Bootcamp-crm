@@ -11,6 +11,8 @@ function formatRupiah(n: number) {
   return n.toLocaleString("id-ID", { style: "currency", currency: "IDR" });
 }
 
+// Halaman "Sales Team" (khusus admin): daftar akun sales + statistik
+// jumlah lead dan revenue per orang, plus form tambah akun baru & hapus akun.
 export default function SalesTable() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -59,29 +61,35 @@ export default function SalesTable() {
     }
   }, [formState]);
 
-  const stats = useMemo(() => {
+  // Ringkas leads jadi statistik per sales: jumlah lead yang ditangani,
+  // total nilai yang sudah closing, dan total nilai yang masih berpotensi
+  // (belum closing tapi juga belum hilang). Di-key pakai id sales
+  // (assigned_to) supaya gampang dicocokkan ke tiap baris tabel di bawah.
+  const statsPerSales = useMemo(() => {
     const map = new Map<
       string,
       { count: number; revenueClosing: number; revenuePotensial: number }
     >();
     for (const lead of leads) {
       if (!lead.assigned_to) continue;
-      const current = map.get(lead.assigned_to) ?? {
+      const currentStat = map.get(lead.assigned_to) ?? {
         count: 0,
         revenueClosing: 0,
         revenuePotensial: 0,
       };
-      current.count += 1;
+      currentStat.count += 1;
       if (lead.status === "Closing") {
-        current.revenueClosing += lead.estimasi_nilai ?? 0;
+        currentStat.revenueClosing += lead.estimasi_nilai ?? 0;
       } else if (lead.status !== "Hilang") {
-        current.revenuePotensial += lead.estimasi_nilai ?? 0;
+        currentStat.revenuePotensial += lead.estimasi_nilai ?? 0;
       }
-      map.set(lead.assigned_to, current);
+      map.set(lead.assigned_to, currentStat);
     }
     return map;
   }, [leads]);
 
+  // Hapus akun sales — sama seperti hapus lead, pakai pola "klik dua kali
+  // untuk konfirmasi" (lihat komentar handleDelete di LeadDetail.tsx).
   function handleDelete(profileId: string) {
     if (confirmDeleteId !== profileId) {
       setConfirmDeleteId(profileId);
@@ -98,18 +106,18 @@ export default function SalesTable() {
     });
   }
 
-  if (loading) return <p className="p-8">Memuat data sales...</p>;
+  if (loading) return <p className="p-8">Loading sales data...</p>;
 
   return (
     <main className="p-8 flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Data Sales</h1>
+        <h1 className="text-xl font-semibold">Sales Team</h1>
         <button
           type="button"
           onClick={() => setShowForm((v) => !v)}
           className="bg-black text-white rounded px-4 py-2 text-sm"
         >
-          {showForm ? "Tutup" : "+ Tambah Sales"}
+          {showForm ? "Close" : "+ Add Sales"}
         </button>
       </div>
 
@@ -122,7 +130,7 @@ export default function SalesTable() {
         >
           <div className="flex flex-col gap-1">
             <label htmlFor="nama" className="text-sm font-medium">
-              Nama
+              Name
             </label>
             <input
               id="nama"
@@ -145,7 +153,7 @@ export default function SalesTable() {
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="phone" className="text-sm font-medium">
-              No Telp
+              Phone
             </label>
             <input id="phone" name="phone" className="border rounded px-3 py-2" />
           </div>
@@ -167,7 +175,7 @@ export default function SalesTable() {
             disabled={formPending}
             className="self-start bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
           >
-            {formPending ? "Menyimpan..." : "Simpan Sales"}
+            {formPending ? "Saving..." : "Save Sales"}
           </button>
           {formState?.error && (
             <p className="text-red-600 text-sm">{formState.error}</p>
@@ -179,58 +187,58 @@ export default function SalesTable() {
         <table className="w-full text-sm border-collapse">
           <thead>
             <tr className="bg-gray-50 border-b text-left">
-              <th className="p-2">Nama</th>
-              <th className="p-2">No Telp</th>
+              <th className="p-2">Name</th>
+              <th className="p-2">Phone</th>
               <th className="p-2">Email</th>
-              <th className="p-2">Jumlah Prospek</th>
-              <th className="p-2">Revenue Closing</th>
-              <th className="p-2">Revenue Potensial</th>
-              <th className="p-2">Aksi</th>
+              <th className="p-2">Prospects</th>
+              <th className="p-2">Won Revenue</th>
+              <th className="p-2">Potential Revenue</th>
+              <th className="p-2">Actions</th>
             </tr>
           </thead>
           <tbody>
             {profiles.length === 0 && (
               <tr>
                 <td colSpan={7} className="p-4 text-center text-gray-500">
-                  Belum ada sales.
+                  No sales accounts yet.
                 </td>
               </tr>
             )}
-            {profiles.map((p) => {
-              const s = stats.get(p.id) ?? {
+            {profiles.map((profile) => {
+              const stat = statsPerSales.get(profile.id) ?? {
                 count: 0,
                 revenueClosing: 0,
                 revenuePotensial: 0,
               };
               return (
-                <tr key={p.id} className="border-b align-top">
+                <tr key={profile.id} className="border-b align-top">
                   <td className="p-2 font-medium">
-                    {p.full_name || "-"}
-                    {p.is_admin && (
+                    {profile.full_name || "-"}
+                    {profile.is_admin && (
                       <span className="ml-2 text-xs text-gray-500 font-normal">
                         (admin)
                       </span>
                     )}
                   </td>
-                  <td className="p-2">{p.phone || "-"}</td>
-                  <td className="p-2">{p.email || "-"}</td>
-                  <td className="p-2">{s.count}</td>
-                  <td className="p-2">{formatRupiah(s.revenueClosing)}</td>
-                  <td className="p-2">{formatRupiah(s.revenuePotensial)}</td>
+                  <td className="p-2">{profile.phone || "-"}</td>
+                  <td className="p-2">{profile.email || "-"}</td>
+                  <td className="p-2">{stat.count}</td>
+                  <td className="p-2">{formatRupiah(stat.revenueClosing)}</td>
+                  <td className="p-2">{formatRupiah(stat.revenuePotensial)}</td>
                   <td className="p-2">
-                    {p.is_admin ? (
+                    {profile.is_admin ? (
                       <span className="text-xs text-gray-400">
-                        Admin tidak bisa dihapus
+                        Admin cannot be deleted
                       </span>
                     ) : (
                       <button
                         type="button"
-                        onClick={() => handleDelete(p.id)}
+                        onClick={() => handleDelete(profile.id)}
                         onBlur={() => setConfirmDeleteId(null)}
                         disabled={isPending}
                         className="text-red-600 border border-red-600 rounded px-2 py-1 text-xs hover:bg-red-50 disabled:opacity-50"
                       >
-                        {confirmDeleteId === p.id ? "Yakin hapus?" : "Hapus"}
+                        {confirmDeleteId === profile.id ? "Confirm delete?" : "Delete"}
                       </button>
                     )}
                   </td>

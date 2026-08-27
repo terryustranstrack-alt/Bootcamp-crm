@@ -6,13 +6,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export type SalesActionState = { error?: string; success?: boolean } | undefined;
 
+// Pastikan yang memanggil Server Action ini sudah login DAN adalah admin.
+// Dipanggil di awal setiap action di file ini karena mengelola akun sales
+// itu operasi sensitif (pakai service role key yang bypass RLS).
 async function requireAdmin() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return { ok: false as const, error: "Belum login." };
+  if (!user) return { ok: false as const, error: "Not logged in." };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -21,12 +24,16 @@ async function requireAdmin() {
     .single();
 
   if (!profile?.is_admin) {
-    return { ok: false as const, error: "Hanya admin yang bisa mengelola data sales." };
+    return { ok: false as const, error: "Only admins can manage sales data." };
   }
 
   return { ok: true as const };
 }
 
+// Buat akun login baru untuk seorang sales (dipakai admin lewat form
+// "+ Add Sales"). Baris `profiles` untuk akun ini dibuat otomatis oleh
+// trigger database `handle_new_user`, jadi di sini tinggal lengkapi nomor
+// telepon setelah user-nya jadi.
 export async function createSales(
   _state: SalesActionState,
   formData: FormData,
@@ -40,10 +47,10 @@ export async function createSales(
   const password = String(formData.get("password") ?? "");
 
   if (!nama || !email || !password) {
-    return { error: "Nama, email, dan password wajib diisi." };
+    return { error: "Name, email, and password are required." };
   }
   if (password.length < 6) {
-    return { error: "Password minimal 6 karakter." };
+    return { error: "Password must be at least 6 characters." };
   }
 
   const admin = createAdminClient();
@@ -55,7 +62,7 @@ export async function createSales(
   });
 
   if (error || !data.user) {
-    return { error: error?.message ?? "Gagal membuat akun sales." };
+    return { error: error?.message ?? "Failed to create sales account." };
   }
 
   // Trigger handle_new_user sudah insert baris profiles; lengkapi no telp.
@@ -72,6 +79,8 @@ export async function createSales(
   return { success: true };
 }
 
+// Hapus akun login seorang sales. Akun admin sengaja tidak boleh dihapus
+// lewat sini supaya sistem tidak pernah kehabisan admin (terkunci total).
 export async function deleteSales(profileId: string): Promise<SalesActionState> {
   const adminCheck = await requireAdmin();
   if (!adminCheck.ok) return { error: adminCheck.error };
@@ -85,7 +94,7 @@ export async function deleteSales(profileId: string): Promise<SalesActionState> 
     .single();
 
   if (targetProfile?.is_admin) {
-    return { error: "Akun admin tidak bisa dihapus (supaya tidak terkunci dari sistem)." };
+    return { error: "Admin accounts cannot be deleted (to avoid getting locked out of the system)." };
   }
 
   const { error } = await admin.auth.admin.deleteUser(profileId);

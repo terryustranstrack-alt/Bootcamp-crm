@@ -1,8 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_ROUTES = ["/login"];
+// /api/whatsapp/webhook dipanggil langsung oleh server Meta (tanpa sesi
+// user) — otentikasinya sendiri lewat verifikasi X-Hub-Signature-256 /
+// hub.verify_token di src/app/api/whatsapp/webhook/route.ts, bukan cookie.
+const PUBLIC_ROUTES = ["/login", "/api/whatsapp/webhook"];
 
+// Dipanggil di setiap request lewat src/proxy.ts (middleware Next.js).
+// Tugasnya dua: (1) refresh token login Supabase kalau sudah mau habis,
+// dan (2) jaga akses — lempar ke /login kalau belum login & bukan halaman
+// publik, atau lempar ke "/" kalau sudah login tapi buka halaman publik
+// (mis. /login lagi).
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 

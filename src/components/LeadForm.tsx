@@ -20,6 +20,10 @@ const EMPTY_FORM = {
   assigned_to: "",
 };
 
+// Form "Add New Lead". Sebelum benar-benar simpan, dicek dulu apakah
+// nomor kontak sudah pernah terdaftar — kalau iya, tampilkan peringatan dan
+// minta konfirmasi sekali lagi sebelum tetap menyimpan (mencegah duplikat
+// tidak sengaja, tapi tetap mengizinkan kalau memang disengaja).
 export default function LeadForm() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
@@ -32,6 +36,8 @@ export default function LeadForm() {
   const profiles = useProfiles();
   const { profile: currentProfile } = useCurrentProfile();
 
+  // Nomor kontak baru diketik ulang — reset peringatan duplikat lama
+  // karena sudah tidak relevan lagi untuk nomor yang baru.
   function updateKontak(kontak: string) {
     setForm({ ...form, kontak });
     setDuplicateWarning(null);
@@ -42,8 +48,11 @@ export default function LeadForm() {
     setError(null);
     setSuccess(false);
 
+    // Baru cek duplikat kalau belum ada peringatan yang sedang ditampilkan
+    // — begitu user klik "Save Anyway" (duplicateWarning sudah terisi),
+    // langsung lanjut simpan tanpa cek ulang.
     if (!duplicateWarning) {
-      const { data: existing, error: cekError } = await supabase
+      const { data: leadsWithSameContact, error: cekError } = await supabase
         .from("leads")
         .select("nama")
         .eq("kontak", form.kontak);
@@ -53,10 +62,10 @@ export default function LeadForm() {
         return;
       }
 
-      if (existing && existing.length > 0) {
-        const namaLain = existing.map((l) => l.nama).join(", ");
+      if (leadsWithSameContact && leadsWithSameContact.length > 0) {
+        const namaLain = leadsWithSameContact.map((l) => l.nama).join(", ");
         setDuplicateWarning(
-          `Kontak ini sudah terdaftar atas nama: ${namaLain}. Klik "Tetap Simpan" untuk lanjut.`,
+          `This contact is already registered under: ${namaLain}. Click "Save Anyway" to continue.`,
         );
         return;
       }
@@ -91,7 +100,7 @@ export default function LeadForm() {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 max-w-md">
       <div className="flex flex-col gap-1">
         <label htmlFor="nama" className="text-sm font-medium">
-          Nama
+          Name
         </label>
         <input
           id="nama"
@@ -104,7 +113,7 @@ export default function LeadForm() {
 
       <div className="flex flex-col gap-1">
         <label htmlFor="kontak" className="text-sm font-medium">
-          Kontak (nomor WA/telepon)
+          Contact (WhatsApp/phone number)
         </label>
         <input
           id="kontak"
@@ -117,7 +126,7 @@ export default function LeadForm() {
 
       <div className="flex flex-col gap-1">
         <label htmlFor="sumber" className="text-sm font-medium">
-          Sumber
+          Source
         </label>
         <SumberSelect
           id="sumber"
@@ -129,7 +138,7 @@ export default function LeadForm() {
 
       <div className="flex flex-col gap-1">
         <label htmlFor="produk" className="text-sm font-medium">
-          Produk/kebutuhan yang diminati
+          Product/need of interest
         </label>
         <input
           id="produk"
@@ -141,7 +150,7 @@ export default function LeadForm() {
 
       <div className="flex flex-col gap-1">
         <label htmlFor="estimasi_nilai" className="text-sm font-medium">
-          Estimasi nilai transaksi (opsional)
+          Estimated deal value (optional)
         </label>
         <CurrencyInput
           id="estimasi_nilai"
@@ -153,7 +162,7 @@ export default function LeadForm() {
 
       <div className="flex flex-col gap-1">
         <label htmlFor="assigned_to" className="text-sm font-medium">
-          Ditugaskan ke
+          Assigned to
         </label>
         {currentProfile?.is_admin ? (
           <AssigneeSelect
@@ -181,16 +190,16 @@ export default function LeadForm() {
         className="bg-black text-white rounded px-4 py-2 disabled:opacity-50"
       >
         {submitting
-          ? "Menyimpan..."
+          ? "Saving..."
           : duplicateWarning
-            ? "Tetap Simpan"
-            : "Simpan Lead"}
+            ? "Save Anyway"
+            : "Save Lead"}
       </button>
 
       {success && (
-        <p className="text-green-600 text-sm">Lead berhasil disimpan.</p>
+        <p className="text-green-600 text-sm">Lead saved successfully.</p>
       )}
-      {error && <p className="text-red-600 text-sm">Gagal menyimpan: {error}</p>}
+      {error && <p className="text-red-600 text-sm">Failed to save: {error}</p>}
     </form>
   );
 }

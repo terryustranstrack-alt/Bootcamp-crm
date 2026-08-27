@@ -15,12 +15,19 @@ import { createClient } from "@/lib/supabase/client";
 import { logStatusChange } from "@/lib/activity";
 import { needsFollowUp } from "@/lib/reminders";
 import { useProfiles, profileLabel } from "@/lib/useProfiles";
-import { LEAD_STATUSES, type Lead, type LeadStatus, type Profile } from "@/lib/types";
+import {
+  LEAD_STATUSES,
+  leadStatusLabel,
+  type Lead,
+  type LeadStatus,
+  type Profile,
+} from "@/lib/types";
 
 const supabase = createClient();
-const SEMUA_SUMBER = "Semua sumber";
-const SEMUA_ASSIGNEE = "Semua assignee";
+const SEMUA_SUMBER = "All sources";
+const SEMUA_ASSIGNEE = "All assignees";
 
+// Satu kartu lead di dalam kolom Kanban — bisa di-drag ke kolom status lain.
 function LeadCard({
   lead,
   profiles,
@@ -64,15 +71,15 @@ function LeadCard({
           {lead.nama}
         </Link>
         <p className="text-xs text-gray-500 mb-2">
-          Update: {new Date(lead.tanggal_update).toLocaleString("id-ID")}
+          Updated: {new Date(lead.tanggal_update).toLocaleString("id-ID")}
         </p>
         {overdue && (
           <p className="text-xs text-amber-600 font-medium mb-2">
-            Perlu follow-up
+            Needs follow-up
           </p>
         )}
         <p className="text-xs text-gray-500 mb-2">
-          {assignee ? profileLabel(assignee) : "Belum ditugaskan"}
+          {assignee ? profileLabel(assignee) : "Unassigned"}
         </p>
       </div>
       <select
@@ -82,7 +89,7 @@ function LeadCard({
       >
         {LEAD_STATUSES.map((s) => (
           <option key={s} value={s}>
-            {s}
+            {leadStatusLabel(s)}
           </option>
         ))}
       </select>
@@ -90,6 +97,8 @@ function LeadCard({
   );
 }
 
+// Satu kolom status (mis. "Baru", "Nego") di papan Kanban, berisi semua
+// kartu lead yang statusnya sama. Jadi target drop saat drag-and-drop.
 function LeadColumn({
   status,
   leads,
@@ -109,7 +118,7 @@ function LeadColumn({
       className={`flex-shrink-0 w-64 rounded ${isOver ? "bg-blue-50" : ""}`}
     >
       <h2 className="font-semibold mb-3">
-        {status} ({leads.length})
+        {leadStatusLabel(status)} ({leads.length})
       </h2>
       <div className="flex flex-col gap-3 min-h-8">
         {leads.map((lead) => (
@@ -125,6 +134,9 @@ function LeadColumn({
   );
 }
 
+// Papan Kanban di halaman utama ("/"): leads dikelompokkan per kolom
+// status, bisa di-drag antar kolom untuk ganti status, dengan pencarian +
+// filter sumber/assignee/follow-up di atasnya.
 export default function LeadBoard() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,6 +192,9 @@ export default function LeadBoard() {
     loadLeads();
   }
 
+  // Dipanggil dnd-kit saat drag selesai. `active` = kartu lead yang
+  // di-drag, `over` = kolom status tempat kartu itu dilepas (atau
+  // undefined kalau dilepas di luar area kolom manapun).
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) return;
@@ -192,20 +207,24 @@ export default function LeadBoard() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
+  // Daftar pilihan filter "Sumber", diambil dari nilai unik yang ada di
+  // leads saat ini (bukan daftar tetap) supaya selalu sesuai data nyata.
   const daftarSumber = useMemo(() => {
-    const unik = new Set(
+    const sumberUnik = new Set(
       leads.map((lead) => lead.sumber).filter((s): s is string => !!s),
     );
-    return [SEMUA_SUMBER, ...Array.from(unik).sort()];
+    return [SEMUA_SUMBER, ...Array.from(sumberUnik).sort()];
   }, [leads]);
 
+  // Terapkan semua filter aktif (pencarian, sumber, assignee, follow-up)
+  // sekaligus ke daftar lead sebelum dibagi ke kolom-kolom status.
   const filteredLeads = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const keyword = search.trim().toLowerCase();
     return leads.filter((lead) => {
       const cocokPencarian =
-        !q ||
-        lead.nama.toLowerCase().includes(q) ||
-        lead.kontak.toLowerCase().includes(q);
+        !keyword ||
+        lead.nama.toLowerCase().includes(keyword) ||
+        lead.kontak.toLowerCase().includes(keyword);
       const cocokSumber =
         sumberFilter === SEMUA_SUMBER || lead.sumber === sumberFilter;
       const cocokAssignee =
@@ -216,8 +235,8 @@ export default function LeadBoard() {
     });
   }, [leads, search, sumberFilter, assigneeFilter, followUpOnly]);
 
-  if (loading) return <p className="p-8">Memuat leads...</p>;
-  if (error) return <p className="p-8 text-red-600">Gagal memuat: {error}</p>;
+  if (loading) return <p className="p-8">Loading leads...</p>;
+  if (error) return <p className="p-8 text-red-600">Failed to load: {error}</p>;
 
   return (
     <div className="flex flex-col gap-4 p-8">
@@ -226,7 +245,7 @@ export default function LeadBoard() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Cari nama atau kontak..."
+          placeholder="Search name or contact..."
           className="border rounded px-3 py-2 text-sm w-64"
         />
         <select
@@ -258,7 +277,7 @@ export default function LeadBoard() {
             checked={followUpOnly}
             onChange={(e) => setFollowUpOnly(e.target.checked)}
           />
-          Perlu follow-up
+          Needs follow-up
         </label>
       </div>
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
