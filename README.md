@@ -14,6 +14,36 @@ akun Sales dari menu **Data Sales** di aplikasi tanpa perlu ke Supabase
 Dashboard — butuh `SUPABASE_SERVICE_ROLE_KEY` di `.env.local` (lihat
 `.env.local.example`).
 
+## Setup WhatsApp
+
+Fitur Inbox pakai WhatsApp Business **Cloud API resmi** dari Meta (bukan
+wrapper pihak ketiga). Asumsi: kamu sudah punya WhatsApp Business Account
+(WABA) terverifikasi. Langkah untuk sambungkan Cloud API-nya:
+
+1. Buat app di [Meta for Developers](https://developers.facebook.com/apps),
+   tambah produk **WhatsApp**, lalu hubungkan ke WABA kamu.
+2. Di WhatsApp > API Setup, catat **Phone number ID** →
+   `WHATSAPP_PHONE_NUMBER_ID`.
+3. Generate permanent access token lewat System User (Business Settings >
+   Users > System Users, beri permission `whatsapp_business_messaging`) →
+   `WHATSAPP_ACCESS_TOKEN`. Token sementara dari halaman API Setup cuma
+   berlaku 24 jam, jangan dipakai untuk production.
+4. App Dashboard > Settings > Basic, catat **App Secret** →
+   `WHATSAPP_APP_SECRET` (dipakai verifikasi webhook).
+5. Isi `WHATSAPP_WEBHOOK_VERIFY_TOKEN` bebas (string apa saja, kamu yang
+   tentukan), lalu di WhatsApp > Configuration, set Callback URL ke
+   `https://<domain-app-kamu>/api/whatsapp/webhook` dan Verify Token ke
+   nilai yang sama. Subscribe ke field `messages`.
+6. Pesan WhatsApp yang masuk otomatis nyambung ke lead lewat pencocokan
+   nomor telepon (`leads.kontak`); kalau belum ada lead yang cocok,
+   percakapan masuk ke pool "belum diklaim" di halaman **Inbox** dan bisa
+   di-link manual ke lead atau dibuatkan lead baru.
+
+Catatan: di luar jendela 24 jam sejak pesan terakhir dari kontak, Meta
+melarang balasan teks bebas (harus pakai message template berbayar/
+approved) — versi ini belum mendukung kirim template, jadi balasan lewat
+Inbox cuma jalan selama jendela 24 jam itu masih terbuka.
+
 ## Getting Started
 
 First, run the development server:

@@ -1,0 +1,348 @@
+"use client";
+
+import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
+import { useConversations, useMessages } from "@/lib/useConversations";
+import {
+  claimConversation,
+  createLeadFromConversation,
+  linkConversationToLead,
+  sendMessage,
+} from "@/app/inbox/actions";
+import type { Conversation, Lead } from "@/lib/types";
+
+const supabase = createClient();
+
+// Nama kontak yang ditampilkan: pakai nama profil WhatsApp kalau ada,
+// kalau tidak fallback ke nomor telepon.
+function contactLabel(conversation: Conversation) {
+  return conversation.display_name || `+${conversation.external_contact_id}`;
+}
+
+export default function InboxView() {
+  const conversations = useConversations();
+  const [selectedConversationId, setSelectedConversationId] = useState<
+    string | null
+  >(null);
+  const messages = useMessages(selectedConversationId);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [leadSearchQuery, setLeadSearchQuery] = useState("");
+  const [showLinkSearch, setShowLinkSearch] = useState(false);
+  const [draftText, setDraftText] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  async function loadLeads() {
+    const { data } = await supabase.from("leads").select("*");
+    if (data) setLeads(data as Lead[]);
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadLeads();
+  }, []);
+
+  const selectedConversation =
+    conversations.find((c) => c.id === selectedConversationId) ?? null;
+
+  // Setiap kali user buka sebuah percakapan, langsung tandai sudah dibaca
+  // (reset unread_count) supaya badge angka belum-dibaca di sidebar hilang.
+  useEffect(() => {
+    if (!selectedConversation || selectedConversation.unread_count === 0) return;
+    supabase
+      .from("conversations")
+      .update({ unread_count: 0 })
+      .eq("id", selectedConversation.id)
+      .then(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConversationId]);
+
+  const linkedLead = selectedConversation?.lead_id
+    ? (leads.find((l) => l.id === selectedConversation.lead_id) ?? null)
+    : null;
+
+  // WhatsApp cuma izinkan balas teks bebas dalam 24 jam sejak pesan
+  // terakhir DARI kontak ("customer service window"). Di luar itu, harus
+  // pakai message template resmi — fitur itu belum dibuat di versi ini,
+  // jadi cukup ditampilkan sebagai peringatan.
+  const windowClosed = useMemo(() => {
+    const lastInboundMessage = [...messages]
+      .reverse()
+      .find((m) => m.direction === "inbound");
+    if (!lastInboundMessage) return true;
+    const millisSinceLastInbound =
+      // eslint-disable-next-line react-hooks/purity -- window check is inherently time-relative
+      Date.now() - new Date(lastInboundMessage.created_at).getTime();
+    return millisSinceLastInbound > 24 * 60 * 60 * 1000;
+  }, [messages]);
+
+  // Hasil pencarian lead saat user mengetik di kotak "Link ke Lead",
+  // dibatasi 8 hasil teratas biar dropdown tidak kepanjangan.
+  const leadSearchResults = useMemo(() => {
+    const keyword = leadSearchQuery.trim().toLowerCase();
+    if (!keyword) return [];
+    return leads
+      .filter(
+        (l) =>
+          l.nama.toLowerCase().includes(keyword) || l.kontak.includes(keyword),
+      )
+      .slice(0, 8);
+  }, [leadSearchQuery, leads]);
+
+  function handleSend() {
+    if (!selectedConversationId || !draftText.trim()) return;
+    const messageToSend = draftText.trim();
+    setDraftText("");
+    setActionError(null);
+    startTransition(async () => {
+      const result = await sendMessage(selectedConversationId, messageToSend);
+      if (result?.error) setActionError(result.error);
+    });
+  }
+
+  function handleClaim() {
+    if (!selectedConversationId) return;
+    setActionError(null);
+    startTransition(async () => {
+      const result = await claimConversation(selectedConversationId);
+      if (result?.error) setActionError(result.error);
+    });
+  }
+
+  function handleLink(leadId: string) {
+    if (!selectedConversationId) return;
+    setActionError(null);
+    startTransition(async () => {
+      const result = await linkConversationToLead(
+        selectedConversationId,
+        leadId,
+      );
+      if (result?.error) {
+        setActionError(result.error);
+      } else {
+        setShowLinkSearch(false);
+        setLeadSearchQuery("");
+        loadLeads();
+      }
+    });
+  }
+
+  function handleCreateLead() {
+    if (!selectedConversationId || !selectedConversation) return;
+    setActionError(null);
+    startTransition(async () => {
+      const result = await createLeadFromConversation(
+        selectedConversationId,
+        contactLabel(selectedConversation),
+      );
+      if (result?.error) {
+        setActionError(result.error);
+      } else {
+        setShowLinkSearch(false);
+        loadLeads();
+      }
+    });
+  }
+
+  return (
+    <main className="flex flex-1 h-[calc(100vh-56px)]">
+      <aside className="w-80 shrink-0 border-r flex flex-col overflow-y-auto min-h-0">
+        <h1 className="px-4 py-3 text-lg font-semibold border-b shrink-0">
+          WhatsApp Inbox
+        </h1>
+        {conversations.length === 0 && (
+          <p className="p-4 text-sm text-gray-500">No conversations yet.</p>
+        )}
+        {conversations.map((conversation) => {
+          const lead = conversation.lead_id
+            ? leads.find((l) => l.id === conversation.lead_id)
+            : null;
+          return (
+            <button
+              key={conversation.id}
+              type="button"
+              onClick={() => setSelectedConversationId(conversation.id)}
+              className={`text-left px-4 py-3 border-b hover:bg-gray-50 ${
+                selectedConversationId === conversation.id ? "bg-gray-100" : ""
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium text-sm truncate">
+                  {contactLabel(conversation)}
+                </span>
+                {conversation.unread_count > 0 && (
+                  <span className="bg-black text-white text-xs rounded-full px-1.5 py-0.5 shrink-0">
+                    {conversation.unread_count}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 truncate">
+                {conversation.last_message_preview || "-"}
+              </p>
+              {lead && (
+                <p className="text-xs text-gray-400 mt-1 truncate">
+                  Lead: {lead.nama}
+                </p>
+              )}
+              {!conversation.assigned_to && (
+                <p className="text-xs text-amber-600 mt-1">Unclaimed</p>
+              )}
+            </button>
+          );
+        })}
+      </aside>
+
+      <section className="flex-1 flex flex-col min-h-0">
+        {!selectedConversation ? (
+          <p className="p-8 text-gray-500 text-sm">
+            Select a conversation on the left.
+          </p>
+        ) : (
+          <>
+            <div className="border-b px-4 py-3 flex items-center justify-between gap-4 shrink-0">
+              <div>
+                <p className="font-medium">{contactLabel(selectedConversation)}</p>
+                <p className="text-xs text-gray-500">
+                  {linkedLead ? (
+                    <Link
+                      href={`/leads/${linkedLead.id}`}
+                      className="hover:underline"
+                    >
+                      Lead: {linkedLead.nama}
+                    </Link>
+                  ) : (
+                    "Not linked to a lead"
+                  )}
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                {!selectedConversation.assigned_to && (
+                  <button
+                    type="button"
+                    onClick={handleClaim}
+                    disabled={isPending}
+                    className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Claim
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowLinkSearch((v) => !v)}
+                  className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50"
+                >
+                  {linkedLead ? "Change Lead" : "Link to Lead"}
+                </button>
+              </div>
+            </div>
+
+            {showLinkSearch && (
+              <div className="border-b px-4 py-3 bg-gray-50 shrink-0">
+                <div className="flex gap-2 mb-2">
+                  <input
+                    value={leadSearchQuery}
+                    onChange={(e) => setLeadSearchQuery(e.target.value)}
+                    placeholder="Search lead name/number..."
+                    className="border rounded px-3 py-2 text-sm flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCreateLead}
+                    disabled={isPending}
+                    className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap"
+                  >
+                    + New Lead
+                  </button>
+                </div>
+                {leadSearchResults.length > 0 && (
+                  <ul className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+                    {leadSearchResults.map((l) => (
+                      <li key={l.id}>
+                        <button
+                          type="button"
+                          onClick={() => handleLink(l.id)}
+                          className="text-sm text-left w-full px-2 py-1 rounded hover:bg-white"
+                        >
+                          {l.nama} · {l.kontak}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {windowClosed && (
+              <p className="bg-amber-50 text-amber-700 text-xs px-4 py-2 border-b shrink-0">
+                It&apos;s been more than 24 hours since this contact&apos;s
+                last message — WhatsApp restricts free-text replies outside
+                this window (requires an official message template, not
+                supported in this version).
+              </p>
+            )}
+
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2 min-h-0">
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`max-w-md rounded px-3 py-2 text-sm ${
+                    m.direction === "outbound"
+                      ? "self-end bg-black text-white"
+                      : "self-start bg-gray-100"
+                  }`}
+                >
+                  {m.type === "text" ? (
+                    <p className="whitespace-pre-wrap">{m.text_body}</p>
+                  ) : (
+                    <p className="italic opacity-80">
+                      {m.type === "unsupported"
+                        ? "Unsupported message"
+                        : `[${m.type}] media message — open WhatsApp to view`}
+                    </p>
+                  )}
+                  <p
+                    className={`text-[10px] mt-1 ${
+                      m.direction === "outbound"
+                        ? "text-gray-300"
+                        : "text-gray-400"
+                    }`}
+                  >
+                    {new Date(m.created_at).toLocaleString("id-ID")}
+                    {m.direction === "outbound" && ` · ${m.status}`}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {actionError && (
+              <p className="text-red-600 text-sm px-4 shrink-0">{actionError}</p>
+            )}
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSend();
+              }}
+              className="border-t p-4 flex gap-2 shrink-0"
+            >
+              <input
+                value={draftText}
+                onChange={(e) => setDraftText(e.target.value)}
+                placeholder="Type a message..."
+                className="flex-1 border rounded px-3 py-2 text-sm"
+              />
+              <button
+                type="submit"
+                disabled={isPending || !draftText.trim()}
+                className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
+              >
+                Send
+              </button>
+            </form>
+          </>
+        )}
+      </section>
+    </main>
+  );
+}

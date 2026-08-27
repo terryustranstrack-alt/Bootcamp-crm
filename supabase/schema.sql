@@ -170,3 +170,108 @@ create policy "insert activities of visible leads"
       )
     )
   );
+
+-- Lihat supabase/migrations/0008_whatsapp_chat.sql
+-- Chat WhatsApp (Cloud API resmi) terintegrasi ke CRM. "channel" dibuat
+-- extensible supaya channel lain bisa ditambah nanti tanpa redesign skema.
+-- conversations.assigned_to null = belum diklaim (pool, terlihat semua
+-- sales/admin); begitu diklaim/ke-link ke lead, silo per-sales sama seperti
+-- tabel leads.
+
+create table if not exists conversations (
+  id uuid primary key default gen_random_uuid(),
+  channel text not null default 'whatsapp' check (channel in ('whatsapp')),
+  external_contact_id text not null,
+  display_name text,
+  lead_id uuid references leads(id) on delete set null,
+  assigned_to uuid references profiles(id) on delete set null,
+  last_message_at timestamptz,
+  last_message_preview text,
+  unread_count int not null default 0,
+  created_at timestamptz not null default now(),
+  unique (channel, external_contact_id)
+);
+
+alter table conversations enable row level security;
+
+create policy "read own or unclaimed conversations, admin reads all"
+  on conversations for select
+  to authenticated
+  using (
+    assigned_to is null
+    or assigned_to = auth.uid()
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+  );
+
+create policy "update own or unclaimed conversations, admin updates all"
+  on conversations for update
+  to authenticated
+  using (
+    assigned_to is null
+    or assigned_to = auth.uid()
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+  )
+  with check (
+    assigned_to is null
+    or assigned_to = auth.uid()
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+  );
+
+create table if not exists messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references conversations(id) on delete cascade,
+  direction text not null check (direction in ('inbound', 'outbound')),
+  wa_message_id text unique,
+  type text not null default 'text'
+    check (type in ('text', 'image', 'document', 'audio', 'video', 'sticker', 'location', 'unsupported')),
+  text_body text,
+  media_id text,
+  media_mime_type text,
+  status text not null default 'sent'
+    check (status in ('pending', 'sent', 'delivered', 'read', 'failed')),
+  error_message text,
+  sent_by uuid references profiles(id) on delete set null,
+  raw jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table messages enable row level security;
+
+create policy "read messages of visible conversations"
+  on messages for select
+  to authenticated
+  using (
+    exists (
+      select 1 from conversations c
+      where c.id = messages.conversation_id
+      and (
+        c.assigned_to is null
+        or c.assigned_to = auth.uid()
+        or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+      )
+    )
+  );
+
+create policy "insert messages into visible conversations"
+  on messages for insert
+  to authenticated
+  with check (
+    exists (
+      select 1 from conversations c
+      where c.id = messages.conversation_id
+      and (
+        c.assigned_to is null
+        or c.assigned_to = auth.uid()
+        or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+      )
+    )
+  );
+
+create policy "update own outbound messages"
+  on messages for update
+  to authenticated
+  using (sent_by = auth.uid())
+  with check (sent_by = auth.uid());
+
+alter publication supabase_realtime add table conversations;
+alter publication supabase_realtime add table messages;
