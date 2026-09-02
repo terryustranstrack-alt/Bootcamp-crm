@@ -569,6 +569,11 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
                     {activity.new_status ? leadStatusLabel(activity.new_status) : "-"}
                   </span>
                 </p>
+              ) : activity.type === "whatsapp_message" ? (
+                <p className="whitespace-pre-wrap">
+                  <span className="text-green-700 font-medium">WhatsApp: </span>
+                  {activity.content}
+                </p>
               ) : (
                 <p className="whitespace-pre-wrap">{activity.content}</p>
               )}

@@ -43,7 +43,8 @@ create policy "authenticated can insert leads"
 create table if not exists lead_activities (
   id uuid primary key default gen_random_uuid(),
   lead_id uuid not null references leads(id) on delete cascade,
-  type text not null check (type in ('status_change', 'note')),
+  -- 0012: 'whatsapp_message' ditambah — chat WA ikut tercatat di riwayat lead.
+  type text not null check (type in ('status_change', 'note', 'whatsapp_message')),
   content text,
   old_status text,
   new_status text,

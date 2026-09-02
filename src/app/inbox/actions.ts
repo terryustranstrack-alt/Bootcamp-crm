@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logWhatsappActivity } from "@/lib/activity";
 import type { ConversationStatus } from "@/lib/types";
 import {
   markMessageRead,
@@ -79,7 +80,7 @@ export async function sendMessage(
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id, external_contact_id")
+    .select("id, external_contact_id, lead_id")
     .eq("id", conversationId)
     .single();
 
@@ -114,6 +115,9 @@ export async function sendMessage(
   if (result.error) return { error: result.error };
 
   await touchConversation(supabase, conversationId, trimmedText);
+  if (conversation.lead_id) {
+    await logWhatsappActivity(supabase, conversation.lead_id, `→ ${trimmedText}`);
+  }
   revalidatePath("/inbox");
   return { success: true };
 }
@@ -150,7 +154,7 @@ export async function retryMessage(
 
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id, external_contact_id")
+    .select("id, external_contact_id, lead_id")
     .eq("id", message.conversation_id)
     .single();
   if (!conversation) {
@@ -171,6 +175,13 @@ export async function retryMessage(
   if (result.error) return { error: result.error };
 
   await touchConversation(supabase, conversation.id, message.text_body ?? "");
+  if (conversation.lead_id) {
+    await logWhatsappActivity(
+      supabase,
+      conversation.lead_id,
+      `→ ${message.text_body ?? ""}`,
+    );
+  }
   revalidatePath("/inbox");
   return { success: true };
 }
@@ -192,7 +203,7 @@ export async function sendMedia(
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id, external_contact_id")
+    .select("id, external_contact_id, lead_id")
     .eq("id", conversationId)
     .single();
   if (conversationError || !conversation) {
@@ -262,6 +273,9 @@ export async function sendMedia(
   }
 
   await touchConversation(supabase, conversationId, preview);
+  if (conversation.lead_id) {
+    await logWhatsappActivity(supabase, conversation.lead_id, `→ ${preview}`);
+  }
   revalidatePath("/inbox");
   return { success: true };
 }

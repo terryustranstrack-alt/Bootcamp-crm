@@ -7,6 +7,7 @@ import {
   type WhatsappWebhookPayload,
 } from "@/lib/whatsapp";
 import { storeInboundMedia } from "@/lib/whatsappMedia";
+import { logWhatsappActivity } from "@/lib/activity";
 
 // Unduh media (bisa lambat) dijalankan lewat after() setelah balas 200 ke
 // Meta — beri ruang durasi lebih dari default 10 detik.
@@ -91,12 +92,14 @@ export async function POST(request: NextRequest) {
         // Cari apakah sudah ada percakapan dengan nomor pengirim ini.
         const { data: existingConversation } = await admin
           .from("conversations")
-          .select("id, status")
+          .select("id, status, lead_id")
           .eq("channel", "whatsapp")
           .eq("external_contact_id", message.from)
           .maybeSingle();
 
         let conversationId: string;
+        let conversationLeadId: string | null =
+          existingConversation?.lead_id ?? null;
 
         if (existingConversation) {
           // Sudah ada percakapan — update ringkasannya. unread_count naik
@@ -147,6 +150,7 @@ export async function POST(request: NextRequest) {
 
           if (createError || !createdConversation) continue;
           conversationId = createdConversation.id;
+          conversationLeadId = matchedLead?.id ?? null;
         }
 
         // Simpan pesannya sendiri. `upsert` + ignoreDuplicates supaya aman
@@ -187,6 +191,13 @@ export async function POST(request: NextRequest) {
               filename: message.document?.filename ?? null,
             }),
           );
+        }
+
+        // Kalau percakapan terhubung ke sebuah lead, catat pesan masuk ini
+        // di riwayat aktivitas lead-nya juga (setelah respons, via after()).
+        if (isNewMessage && conversationLeadId) {
+          const leadId = conversationLeadId;
+          after(() => logWhatsappActivity(admin, leadId, preview));
         }
       }
 

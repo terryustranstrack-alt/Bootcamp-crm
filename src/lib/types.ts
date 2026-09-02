@@ -69,7 +69,7 @@ export type Lead = {
   created_by: string | null;
 };
 
-export type LeadActivityType = "status_change" | "note";
+export type LeadActivityType = "status_change" | "note" | "whatsapp_message";
 
 // Satu baris riwayat aktivitas pada sebuah lead: perubahan status atau
 // catatan bebas yang ditambahkan sales/admin.

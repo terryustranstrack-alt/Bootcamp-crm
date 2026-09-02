@@ -34,6 +34,9 @@ type LeadFormProps = {
   // diisi, form tidak menampilkan pesan sukses sendiri — pemanggil yang
   // memutuskan apa berikutnya (mis. inbox: langsung link ke percakapan).
   onSaved?: (leadId: string) => void;
+  // Kunci field kontak (tidak bisa diedit) — dipakai saat lead dibuat dari
+  // sebuah percakapan WhatsApp: nomornya harus sama dengan nomor chat.
+  lockContact?: boolean;
 };
 
 // Form "Add New Lead". Sebelum benar-benar simpan, dicek dulu apakah
@@ -43,7 +46,11 @@ type LeadFormProps = {
 //
 // Dipakai di dua tempat: halaman "/leads/baru" (berdiri sendiri) dan panel
 // "New Lead" di Inbox (dengan initialValues + onSaved).
-export default function LeadForm({ initialValues, onSaved }: LeadFormProps = {}) {
+export default function LeadForm({
+  initialValues,
+  onSaved,
+  lockContact = false,
+}: LeadFormProps = {}) {
   const [form, setForm] = useState<LeadFormValues>(() => ({
     ...EMPTY_FORM,
     ...initialValues,
@@ -159,8 +166,16 @@ export default function LeadForm({ initialValues, onSaved }: LeadFormProps = {})
           required
           value={form.kontak}
           onChange={(e) => updateKontak(e.target.value)}
-          className="border rounded px-3 py-2"
+          readOnly={lockContact}
+          className={`border rounded px-3 py-2 ${
+            lockContact ? "bg-gray-50 text-gray-500" : ""
+          }`}
         />
+        {lockContact && (
+          <span className="text-xs text-gray-400">
+            Locked to this WhatsApp chat.
+          </span>
+        )}
       </div>
 
       <div className="flex flex-col gap-1">

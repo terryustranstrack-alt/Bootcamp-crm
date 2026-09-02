@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/client";
 import { useConversations, useMessages } from "@/lib/useConversations";
 import {
   claimConversation,
-  linkConversationToLead,
   markConversationRead,
   retryMessage,
   sendMediaAttachment,
@@ -14,7 +13,7 @@ import {
   setConversationStatus,
   transferConversation,
 } from "@/app/inbox/actions";
-import LeadForm from "@/components/LeadForm";
+import LeadContextPanel from "@/components/LeadContextPanel";
 import { useProfiles, profileLabel } from "@/lib/useProfiles";
 import { useCurrentProfile } from "@/lib/useCurrentProfile";
 import { searchMessages, type MessageSearchHit } from "@/lib/searchInbox";
@@ -122,9 +121,6 @@ export default function InboxView() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const profiles = useProfiles();
   const { profile: currentProfile } = useCurrentProfile();
-  const [leadSearchQuery, setLeadSearchQuery] = useState("");
-  const [showLinkSearch, setShowLinkSearch] = useState(false);
-  const [showNewLeadForm, setShowNewLeadForm] = useState(false);
   const [filter, setFilter] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
   const [messageHits, setMessageHits] = useState<MessageSearchHit[] | null>(null);
@@ -221,19 +217,6 @@ export default function InboxView() {
     return millisSinceLastInbound > 24 * 60 * 60 * 1000;
   }, [messages]);
 
-  // Hasil pencarian lead saat user mengetik di kotak "Link ke Lead",
-  // dibatasi 8 hasil teratas biar dropdown tidak kepanjangan.
-  const leadSearchResults = useMemo(() => {
-    const keyword = leadSearchQuery.trim().toLowerCase();
-    if (!keyword) return [];
-    return leads
-      .filter(
-        (l) =>
-          l.nama.toLowerCase().includes(keyword) || l.kontak.includes(keyword),
-      )
-      .slice(0, 8);
-  }, [leadSearchQuery, leads]);
-
   function handleSend() {
     if (!selectedConversationId || !draftText.trim()) return;
     const messageToSend = draftText.trim();
@@ -311,44 +294,6 @@ export default function InboxView() {
     });
   }
 
-  function handleLink(leadId: string) {
-    if (!selectedConversationId) return;
-    setActionError(null);
-    startTransition(async () => {
-      const result = await linkConversationToLead(
-        selectedConversationId,
-        leadId,
-      );
-      if (result?.error) {
-        setActionError(result.error);
-      } else {
-        setShowLinkSearch(false);
-        setLeadSearchQuery("");
-        loadLeads();
-      }
-    });
-  }
-
-  // Dipanggil setelah LeadForm di panel Inbox berhasil membuat lead baru —
-  // langsung hubungkan lead itu ke percakapan yang sedang dibuka.
-  function handleNewLeadSaved(leadId: string) {
-    if (!selectedConversationId) return;
-    setActionError(null);
-    startTransition(async () => {
-      const result = await linkConversationToLead(
-        selectedConversationId,
-        leadId,
-      );
-      if (result?.error) {
-        setActionError(result.error);
-      } else {
-        setShowNewLeadForm(false);
-        setShowLinkSearch(false);
-        loadLeads();
-      }
-    });
-  }
-
   return (
     <main className="flex flex-1 h-[calc(100vh-56px)]">
       <aside className="w-80 shrink-0 border-r flex flex-col min-h-0">
@@ -394,11 +339,7 @@ export default function InboxView() {
                   <button
                     key={hit.messageId}
                     type="button"
-                    onClick={() => {
-                      setSelectedConversationId(hit.conversationId);
-                      setShowLinkSearch(false);
-                      setShowNewLeadForm(false);
-                    }}
+                    onClick={() => setSelectedConversationId(hit.conversationId)}
                     className="text-left w-full px-4 py-2 border-b hover:bg-white"
                   >
                     <span className="text-xs font-medium truncate block">
@@ -429,11 +370,7 @@ export default function InboxView() {
               <button
                 key={conversation.id}
                 type="button"
-                onClick={() => {
-                  setSelectedConversationId(conversation.id);
-                  setShowLinkSearch(false);
-                  setShowNewLeadForm(false);
-                }}
+                onClick={() => setSelectedConversationId(conversation.id)}
                 className={`text-left w-full px-4 py-3 border-b hover:bg-gray-50 ${
                   selectedConversationId === conversation.id ? "bg-gray-100" : ""
                 }`}
@@ -549,70 +486,8 @@ export default function InboxView() {
                     Mark resolved
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowLinkSearch((v) => !v);
-                    setShowNewLeadForm(false);
-                  }}
-                  className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50"
-                >
-                  {linkedLead ? "Change Lead" : "Link to Lead"}
-                </button>
               </div>
             </div>
-
-            {showLinkSearch && (
-              <div className="border-b px-4 py-3 bg-gray-50 shrink-0 max-h-[60vh] overflow-y-auto">
-                <div className="flex gap-2 mb-2">
-                  <input
-                    value={leadSearchQuery}
-                    onChange={(e) => setLeadSearchQuery(e.target.value)}
-                    placeholder="Search lead name/number..."
-                    disabled={showNewLeadForm}
-                    className="border rounded px-3 py-2 text-sm flex-1 disabled:opacity-50"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewLeadForm((v) => !v)}
-                    disabled={isPending}
-                    className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap"
-                  >
-                    {showNewLeadForm ? "Cancel" : "+ New Lead"}
-                  </button>
-                </div>
-
-                {showNewLeadForm ? (
-                  // Form lengkap: nomor kontak & sumber "WhatsApp" sudah diisi
-                  // dari percakapan; sisanya diketik sales. Setelah tersimpan,
-                  // lead otomatis di-link ke percakapan ini (handleNewLeadSaved).
-                  <LeadForm
-                    initialValues={{
-                      kontak: selectedConversation.external_contact_id,
-                      nama: selectedConversation.display_name ?? "",
-                      sumber: "WhatsApp",
-                    }}
-                    onSaved={handleNewLeadSaved}
-                  />
-                ) : (
-                  leadSearchResults.length > 0 && (
-                    <ul className="flex flex-col gap-1 max-h-40 overflow-y-auto">
-                      {leadSearchResults.map((l) => (
-                        <li key={l.id}>
-                          <button
-                            type="button"
-                            onClick={() => handleLink(l.id)}
-                            className="text-sm text-left w-full px-2 py-1 rounded hover:bg-white"
-                          >
-                            {l.nama} · {l.kontak}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )
-                )}
-              </div>
-            )}
 
             {windowClosed && (
               <p className="bg-amber-50 text-amber-700 text-xs px-4 py-2 border-b shrink-0">
@@ -703,6 +578,17 @@ export default function InboxView() {
           </>
         )}
       </section>
+
+      {selectedConversation && (
+        <LeadContextPanel
+          conversation={selectedConversation}
+          lead={linkedLead}
+          allLeads={leads}
+          profiles={profiles}
+          currentProfile={currentProfile}
+          onChanged={loadLeads}
+        />
+      )}
     </main>
   );
 }
