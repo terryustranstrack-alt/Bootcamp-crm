@@ -51,6 +51,10 @@ export default function TemplatePicker({
       setError("This template needs a header image URL.");
       return;
     }
+    if (params.some((p) => !p.trim())) {
+      setError("Fill in every template value before sending.");
+      return;
+    }
     const rendered = renderTemplate(selected.body_text, params);
     setError(null);
     startTransition(async () => {
