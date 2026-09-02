@@ -11,12 +11,25 @@ import {
   retryMessage,
   sendMediaAttachment,
   sendMessage,
+  setConversationStatus,
   transferConversation,
 } from "@/app/inbox/actions";
 import LeadForm from "@/components/LeadForm";
 import { useProfiles, profileLabel } from "@/lib/useProfiles";
 import { useCurrentProfile } from "@/lib/useCurrentProfile";
+import { searchMessages, type MessageSearchHit } from "@/lib/searchInbox";
 import type { Conversation, Lead, Message } from "@/lib/types";
+
+// Tab filter untuk daftar percakapan. "all" menyembunyikan yang sudah resolved.
+const FILTERS = [
+  { key: "all", label: "All" },
+  { key: "unread", label: "Unread" },
+  { key: "unclaimed", label: "Unclaimed" },
+  { key: "mine", label: "Mine" },
+  { key: "resolved", label: "Resolved" },
+] as const;
+
+type FilterKey = (typeof FILTERS)[number]["key"];
 
 const supabase = createClient();
 
@@ -112,6 +125,9 @@ export default function InboxView() {
   const [leadSearchQuery, setLeadSearchQuery] = useState("");
   const [showLinkSearch, setShowLinkSearch] = useState(false);
   const [showNewLeadForm, setShowNewLeadForm] = useState(false);
+  const [filter, setFilter] = useState<FilterKey>("all");
+  const [search, setSearch] = useState("");
+  const [messageHits, setMessageHits] = useState<MessageSearchHit[] | null>(null);
   const [draftText, setDraftText] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -130,6 +146,40 @@ export default function InboxView() {
 
   const selectedConversation =
     conversations.find((c) => c.id === selectedConversationId) ?? null;
+
+  // Daftar percakapan setelah tab filter + pencarian kontak diterapkan.
+  const filteredConversations = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    return conversations.filter((c) => {
+      const mine = c.assigned_to === currentProfile?.id;
+      if (filter === "resolved" && c.status !== "resolved") return false;
+      if (filter !== "resolved" && c.status === "resolved") return false;
+      if (filter === "unread" && c.unread_count === 0) return false;
+      if (filter === "unclaimed" && c.assigned_to) return false;
+      if (filter === "mine" && !mine) return false;
+      if (keyword) {
+        const haystack = `${c.display_name ?? ""} ${c.external_contact_id} ${
+          c.last_message_preview ?? ""
+        }`.toLowerCase();
+        if (!haystack.includes(keyword)) return false;
+      }
+      return true;
+    });
+  }, [conversations, filter, search, currentProfile?.id]);
+
+  // Cari di dalam isi pesan (server) — debounce 300ms saat mengetik.
+  useEffect(() => {
+    const keyword = search.trim();
+    if (keyword.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMessageHits(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setMessageHits(await searchMessages(keyword));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   // Setiap kali user buka sebuah percakapan yang masih ada pesan belum
   // dibaca: reset unread_count DAN kirim tanda "dibaca" (centang biru) ke
@@ -238,6 +288,16 @@ export default function InboxView() {
     });
   }
 
+  // Tandai percakapan selesai / buka lagi.
+  function handleSetStatus(status: "open" | "resolved") {
+    if (!selectedConversationId) return;
+    setActionError(null);
+    startTransition(async () => {
+      const result = await setConversationStatus(selectedConversationId, status);
+      if (result?.error) setActionError(result.error);
+    });
+  }
+
   // Ganti sales penanggung jawab percakapan (atau lepas ke pool = null).
   function handleAssign(toProfileId: string | null) {
     if (!selectedConversationId) return;
@@ -291,54 +351,123 @@ export default function InboxView() {
 
   return (
     <main className="flex flex-1 h-[calc(100vh-56px)]">
-      <aside className="w-80 shrink-0 border-r flex flex-col overflow-y-auto min-h-0">
-        <h1 className="px-4 py-3 text-lg font-semibold border-b shrink-0">
-          WhatsApp Inbox
-        </h1>
-        {conversations.length === 0 && (
-          <p className="p-4 text-sm text-gray-500">No conversations yet.</p>
-        )}
-        {conversations.map((conversation) => {
-          const lead = conversation.lead_id
-            ? leads.find((l) => l.id === conversation.lead_id)
-            : null;
-          return (
-            <button
-              key={conversation.id}
-              type="button"
-              onClick={() => {
-                setSelectedConversationId(conversation.id);
-                setShowLinkSearch(false);
-                setShowNewLeadForm(false);
-              }}
-              className={`text-left px-4 py-3 border-b hover:bg-gray-50 ${
-                selectedConversationId === conversation.id ? "bg-gray-100" : ""
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-sm truncate">
-                  {contactLabel(conversation)}
-                </span>
-                {conversation.unread_count > 0 && (
-                  <span className="bg-black text-white text-xs rounded-full px-1.5 py-0.5 shrink-0">
-                    {conversation.unread_count}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 truncate">
-                {conversation.last_message_preview || "-"}
+      <aside className="w-80 shrink-0 border-r flex flex-col min-h-0">
+        <div className="border-b shrink-0">
+          <h1 className="px-4 pt-3 text-lg font-semibold">WhatsApp Inbox</h1>
+          <div className="px-3 py-2">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, number, message…"
+              className="w-full border rounded px-3 py-1.5 text-sm"
+            />
+          </div>
+          <div className="px-2 pb-2 flex flex-wrap gap-1">
+            {FILTERS.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilter(f.key)}
+                className={`text-xs rounded px-2 py-1 ${
+                  filter === f.key
+                    ? "bg-black text-white"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {messageHits && messageHits.length > 0 && (
+            <div className="border-b bg-gray-50">
+              <p className="px-4 py-1 text-xs font-medium text-gray-400">
+                Message matches
               </p>
-              {lead && (
-                <p className="text-xs text-gray-400 mt-1 truncate">
-                  Lead: {lead.nama}
+              {messageHits.map((hit) => {
+                const c = conversations.find(
+                  (x) => x.id === hit.conversationId,
+                );
+                return (
+                  <button
+                    key={hit.messageId}
+                    type="button"
+                    onClick={() => {
+                      setSelectedConversationId(hit.conversationId);
+                      setShowLinkSearch(false);
+                      setShowNewLeadForm(false);
+                    }}
+                    className="text-left w-full px-4 py-2 border-b hover:bg-white"
+                  >
+                    <span className="text-xs font-medium truncate block">
+                      {c ? contactLabel(c) : "Conversation"}
+                    </span>
+                    <span className="text-xs text-gray-500 truncate block">
+                      {hit.direction === "outbound" ? "→ " : ""}
+                      {hit.snippet}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {filteredConversations.length === 0 && (
+            <p className="p-4 text-sm text-gray-500">
+              {conversations.length === 0
+                ? "No conversations yet."
+                : "Nothing here."}
+            </p>
+          )}
+          {filteredConversations.map((conversation) => {
+            const lead = conversation.lead_id
+              ? leads.find((l) => l.id === conversation.lead_id)
+              : null;
+            return (
+              <button
+                key={conversation.id}
+                type="button"
+                onClick={() => {
+                  setSelectedConversationId(conversation.id);
+                  setShowLinkSearch(false);
+                  setShowNewLeadForm(false);
+                }}
+                className={`text-left w-full px-4 py-3 border-b hover:bg-gray-50 ${
+                  selectedConversationId === conversation.id ? "bg-gray-100" : ""
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-sm truncate">
+                    {contactLabel(conversation)}
+                  </span>
+                  {conversation.unread_count > 0 && (
+                    <span className="bg-black text-white text-xs rounded-full px-1.5 py-0.5 shrink-0">
+                      {conversation.unread_count}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 truncate">
+                  {conversation.last_message_preview || "-"}
                 </p>
-              )}
-              {!conversation.assigned_to && (
-                <p className="text-xs text-amber-600 mt-1">Unclaimed</p>
-              )}
-            </button>
-          );
-        })}
+                {lead && (
+                  <p className="text-xs text-gray-400 mt-1 truncate">
+                    Lead: {lead.nama}
+                  </p>
+                )}
+                <div className="flex gap-2 mt-1">
+                  {!conversation.assigned_to && (
+                    <span className="text-xs text-amber-600">Unclaimed</span>
+                  )}
+                  {conversation.status === "resolved" && (
+                    <span className="text-xs text-green-600">Resolved</span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </aside>
 
       <section className="flex-1 flex flex-col min-h-0">
@@ -399,6 +528,25 @@ export default function InboxView() {
                     className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
                   >
                     Claim
+                  </button>
+                )}
+                {selectedConversation.status === "resolved" ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSetStatus("open")}
+                    disabled={isPending}
+                    className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Reopen
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleSetStatus("resolved")}
+                    disabled={isPending}
+                    className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Mark resolved
                   </button>
                 )}
                 <button

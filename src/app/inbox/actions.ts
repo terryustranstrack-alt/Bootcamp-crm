@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { ConversationStatus } from "@/lib/types";
 import {
   markMessageRead,
   sendMediaMessage,
@@ -408,6 +409,33 @@ export async function transferConversation(
   const { error } = await admin
     .from("conversations")
     .update({ assigned_to: toProfileId })
+    .eq("id", conversationId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/inbox");
+  return { success: true };
+}
+
+// Ubah status antrean percakapan (open / pending / resolved). Saat di-resolve
+// dicatat siapa & kapan; saat dibuka lagi, catatan itu dihapus.
+export async function setConversationStatus(
+  conversationId: string,
+  status: ConversationStatus,
+): Promise<InboxActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not logged in." };
+
+  const patch =
+    status === "resolved"
+      ? { status, resolved_at: new Date().toISOString(), resolved_by: user.id }
+      : { status, resolved_at: null, resolved_by: null };
+
+  const { error } = await supabase
+    .from("conversations")
+    .update(patch)
     .eq("id", conversationId);
 
   if (error) return { error: error.message };

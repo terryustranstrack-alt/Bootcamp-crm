@@ -100,6 +100,10 @@ export type Profile = {
 // kanal lain nanti (mis. Instagram DM) tanpa ubah struktur tabel.
 export type ConversationChannel = "whatsapp";
 
+// Status penanganan percakapan (antrean kerja inbox). 'open' = perlu
+// ditindaklanjuti, 'pending' = menunggu sesuatu, 'resolved' = selesai.
+export type ConversationStatus = "open" | "pending" | "resolved";
+
 // Satu percakapan (thread chat) dengan satu kontak eksternal. Bisa
 // terhubung ke sebuah lead atau belum (kontak baru yang belum jadi lead).
 export type Conversation = {
@@ -112,6 +116,9 @@ export type Conversation = {
   last_message_at: string | null;
   last_message_preview: string | null;
   unread_count: number;
+  status: ConversationStatus;
+  resolved_at: string | null;
+  resolved_by: string | null;
   created_at: string;
 };
 

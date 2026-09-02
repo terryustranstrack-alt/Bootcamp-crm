@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
         // Cari apakah sudah ada percakapan dengan nomor pengirim ini.
         const { data: existingConversation } = await admin
           .from("conversations")
-          .select("id")
+          .select("id, status")
           .eq("channel", "whatsapp")
           .eq("external_contact_id", message.from)
           .maybeSingle();
@@ -101,6 +101,7 @@ export async function POST(request: NextRequest) {
         if (existingConversation) {
           // Sudah ada percakapan — update ringkasannya. unread_count naik
           // otomatis lewat trigger saat pesan di bawah ini di-insert.
+          // Kalau percakapan tadinya sudah "resolved", buka lagi (ada pesan baru).
           conversationId = existingConversation.id;
           await admin
             .from("conversations")
@@ -108,6 +109,9 @@ export async function POST(request: NextRequest) {
               display_name: contactName ?? undefined,
               last_message_at: new Date().toISOString(),
               last_message_preview: preview,
+              ...(existingConversation.status === "resolved"
+                ? { status: "open", resolved_at: null, resolved_by: null }
+                : {}),
             })
             .eq("id", conversationId);
         } else {

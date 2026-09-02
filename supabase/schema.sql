@@ -192,6 +192,10 @@ create table if not exists conversations (
   last_message_at timestamptz,
   last_message_preview text,
   unread_count int not null default 0,
+  -- 0011: status antrean kerja. Pesan masuk baru otomatis membuka lagi yang 'resolved'.
+  status text not null default 'open' check (status in ('open', 'pending', 'resolved')),
+  resolved_at timestamptz,
+  resolved_by uuid references profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   unique (channel, external_contact_id)
 );
@@ -310,6 +314,15 @@ create trigger on_message_inserted_bump_unread
 insert into storage.buckets (id, name, public)
   values ('whatsapp-media', 'whatsapp-media', false)
   on conflict (id) do nothing;
+
+-- 0011: indeks trigram untuk pencarian teks pesan & kontak.
+create extension if not exists pg_trgm;
+create index if not exists messages_text_body_trgm
+  on messages using gin (text_body gin_trgm_ops);
+create index if not exists conversations_display_name_trgm
+  on conversations using gin (display_name gin_trgm_ops);
+create index if not exists conversations_external_contact_trgm
+  on conversations using gin (external_contact_id gin_trgm_ops);
 
 alter publication supabase_realtime add table conversations;
 alter publication supabase_realtime add table messages;
