@@ -1,26 +1,103 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useConversations, useMessages } from "@/lib/useConversations";
 import {
   claimConversation,
   linkConversationToLead,
+  markConversationRead,
+  retryMessage,
+  sendMediaAttachment,
   sendMessage,
   transferConversation,
 } from "@/app/inbox/actions";
 import LeadForm from "@/components/LeadForm";
 import { useProfiles, profileLabel } from "@/lib/useProfiles";
 import { useCurrentProfile } from "@/lib/useCurrentProfile";
-import type { Conversation, Lead } from "@/lib/types";
+import type { Conversation, Lead, Message } from "@/lib/types";
 
 const supabase = createClient();
+
+// Batas ukuran lampiran yang dikirim dari inbox (WhatsApp sendiri membatasi
+// ~16 MB untuk gambar/audio/video).
+const MAX_ATTACHMENT_BYTES = 16 * 1024 * 1024;
 
 // Nama kontak yang ditampilkan: pakai nama profil WhatsApp kalau ada,
 // kalau tidak fallback ke nomor telepon.
 function contactLabel(conversation: Conversation) {
   return conversation.display_name || `+${conversation.external_contact_id}`;
+}
+
+// Waktu tampil sebuah pesan: pakai waktu asli WhatsApp kalau ada.
+function messageTime(m: Message): string {
+  return new Date(m.wa_timestamp ?? m.created_at).toLocaleString("id-ID");
+}
+
+// Isi sebuah gelembung pesan: teks biasa, atau media (gambar tampil langsung,
+// audio/video pakai player, dokumen jadi link unduh). Media yang belum selesai
+// diunduh ke Storage ditampilkan sebagai label sementara.
+function MessageBody({ m }: { m: Message }) {
+  const mediaUrl = `/api/whatsapp/media/${m.id}`;
+  const caption = m.text_body ? (
+    <p className="whitespace-pre-wrap mt-1">{m.text_body}</p>
+  ) : null;
+
+  if (m.type === "text") {
+    return <p className="whitespace-pre-wrap">{m.text_body}</p>;
+  }
+  if (m.type === "location") return <p className="italic opacity-80">📍 Location</p>;
+  if (m.type === "unsupported") {
+    return <p className="italic opacity-80">Unsupported message</p>;
+  }
+
+  if (m.media_status === "pending") {
+    return <p className="italic opacity-80">[{m.type}] downloading…</p>;
+  }
+  if (m.media_status !== "stored") {
+    return (
+      <p className="italic opacity-80">
+        [{m.type}] — open WhatsApp to view
+      </p>
+    );
+  }
+
+  if (m.type === "image" || m.type === "sticker") {
+    return (
+      <>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={mediaUrl}
+          alt={m.type}
+          className="rounded max-w-full max-h-64 object-contain"
+        />
+        {caption}
+      </>
+    );
+  }
+  if (m.type === "audio") {
+    return <audio controls src={mediaUrl} className="max-w-full" />;
+  }
+  if (m.type === "video") {
+    return (
+      <>
+        <video controls src={mediaUrl} className="rounded max-w-full max-h-64" />
+        {caption}
+      </>
+    );
+  }
+  // document
+  return (
+    <a
+      href={mediaUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="underline break-all"
+    >
+      📄 {m.media_filename || "Document"}
+    </a>
+  );
 }
 
 export default function InboxView() {
@@ -37,6 +114,8 @@ export default function InboxView() {
   const [showNewLeadForm, setShowNewLeadForm] = useState(false);
   const [draftText, setDraftText] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isPending, startTransition] = useTransition();
 
   async function loadLeads() {
@@ -52,15 +131,12 @@ export default function InboxView() {
   const selectedConversation =
     conversations.find((c) => c.id === selectedConversationId) ?? null;
 
-  // Setiap kali user buka sebuah percakapan, langsung tandai sudah dibaca
-  // (reset unread_count) supaya badge angka belum-dibaca di sidebar hilang.
+  // Setiap kali user buka sebuah percakapan yang masih ada pesan belum
+  // dibaca: reset unread_count DAN kirim tanda "dibaca" (centang biru) ke
+  // WhatsApp untuk pesan masuk terakhir.
   useEffect(() => {
     if (!selectedConversation || selectedConversation.unread_count === 0) return;
-    supabase
-      .from("conversations")
-      .update({ unread_count: 0 })
-      .eq("id", selectedConversation.id)
-      .then(() => {});
+    markConversationRead(selectedConversation.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConversationId]);
 
@@ -87,9 +163,11 @@ export default function InboxView() {
       .reverse()
       .find((m) => m.direction === "inbound");
     if (!lastInboundMessage) return true;
+    const lastInboundAt =
+      lastInboundMessage.wa_timestamp ?? lastInboundMessage.created_at;
     const millisSinceLastInbound =
       // eslint-disable-next-line react-hooks/purity -- window check is inherently time-relative
-      Date.now() - new Date(lastInboundMessage.created_at).getTime();
+      Date.now() - new Date(lastInboundAt).getTime();
     return millisSinceLastInbound > 24 * 60 * 60 * 1000;
   }, [messages]);
 
@@ -113,6 +191,40 @@ export default function InboxView() {
     setActionError(null);
     startTransition(async () => {
       const result = await sendMessage(selectedConversationId, messageToSend);
+      if (result?.error) setActionError(result.error);
+    });
+  }
+
+  function handleRetry(messageId: string) {
+    setActionError(null);
+    startTransition(async () => {
+      const result = await retryMessage(messageId);
+      if (result?.error) setActionError(result.error);
+    });
+  }
+
+  // Kirim file lampiran: serahkan ke server (upload ke Storage + kirim ke
+  // WhatsApp) lewat satu server action.
+  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !selectedConversationId) return;
+
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      setActionError("File is too large (max 16 MB).");
+      return;
+    }
+
+    setActionError(null);
+    setUploading(true);
+
+    const conversationId = selectedConversationId;
+    const formData = new FormData();
+    formData.append("file", file);
+
+    startTransition(async () => {
+      const result = await sendMediaAttachment(conversationId, formData);
+      setUploading(false);
       if (result?.error) setActionError(result.error);
     });
   }
@@ -373,15 +485,7 @@ export default function InboxView() {
                       : "self-start bg-gray-100"
                   }`}
                 >
-                  {m.type === "text" ? (
-                    <p className="whitespace-pre-wrap">{m.text_body}</p>
-                  ) : (
-                    <p className="italic opacity-80">
-                      {m.type === "unsupported"
-                        ? "Unsupported message"
-                        : `[${m.type}] media message — open WhatsApp to view`}
-                    </p>
-                  )}
+                  <MessageBody m={m} />
                   <p
                     className={`text-[10px] mt-1 ${
                       m.direction === "outbound"
@@ -389,9 +493,21 @@ export default function InboxView() {
                         : "text-gray-400"
                     }`}
                   >
-                    {new Date(m.created_at).toLocaleString("id-ID")}
+                    {messageTime(m)}
                     {m.direction === "outbound" && ` · ${m.status}`}
                   </p>
+                  {m.direction === "outbound" &&
+                    m.status === "failed" &&
+                    m.type === "text" && (
+                      <button
+                        type="button"
+                        onClick={() => handleRetry(m.id)}
+                        disabled={isPending}
+                        className="mt-1 text-[10px] underline text-gray-200 disabled:opacity-50"
+                      >
+                        Retry
+                      </button>
+                    )}
                 </div>
               ))}
             </div>
@@ -407,6 +523,21 @@ export default function InboxView() {
               }}
               className="border-t p-4 flex gap-2 shrink-0"
             >
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileSelected}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isPending || uploading}
+                title="Attach a file"
+                className="border rounded px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+              >
+                {uploading ? "…" : "📎"}
+              </button>
               <input
                 value={draftText}
                 onChange={(e) => setDraftText(e.target.value)}

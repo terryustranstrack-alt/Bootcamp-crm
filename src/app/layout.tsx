@@ -4,6 +4,8 @@ import "./globals.css";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "./login/actions";
 import NavMenu from "@/components/NavMenu";
+import InboxUnreadProvider from "@/components/InboxUnreadProvider";
+import InboxNotifier from "@/components/InboxNotifier";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -46,23 +48,28 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {user && (
-          <header className="flex items-center justify-between border-b px-8 py-3 text-sm">
-            <NavMenu isAdmin={isAdmin} />
-            <div className="flex items-center gap-4">
-              <span className="text-gray-500">{user.email}</span>
-              <form action={signOut}>
-                <button
-                  type="submit"
-                  className="text-gray-500 hover:underline"
-                >
-                  Log Out
-                </button>
-              </form>
-            </div>
-          </header>
+        {user ? (
+          <InboxUnreadProvider>
+            <header className="flex items-center justify-between border-b px-8 py-3 text-sm">
+              <NavMenu isAdmin={isAdmin} />
+              <div className="flex items-center gap-4">
+                <InboxNotifier />
+                <span className="text-gray-500">{user.email}</span>
+                <form action={signOut}>
+                  <button
+                    type="submit"
+                    className="text-gray-500 hover:underline"
+                  >
+                    Log Out
+                  </button>
+                </form>
+              </div>
+            </header>
+            {children}
+          </InboxUnreadProvider>
+        ) : (
+          children
         )}
-        {children}
       </body>
     </html>
   );

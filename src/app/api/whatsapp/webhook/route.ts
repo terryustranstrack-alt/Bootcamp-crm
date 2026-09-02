@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest, after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone } from "@/lib/phone";
 import {
@@ -6,6 +6,11 @@ import {
   verifyWebhookSignature,
   type WhatsappWebhookPayload,
 } from "@/lib/whatsapp";
+import { storeInboundMedia } from "@/lib/whatsappMedia";
+
+// Unduh media (bisa lambat) dijalankan lewat after() setelah balas 200 ke
+// Meta — beri ruang durasi lebih dari default 10 detik.
+export const maxDuration = 60;
 
 // Meta memanggil GET ini sekali saat kamu set Callback URL di App Dashboard.
 // Ini cuma "jabat tangan" verifikasi: balikin apa adanya nilai hub.challenge
@@ -77,11 +82,16 @@ export async function POST(request: NextRequest) {
           message.image ?? message.document ?? message.audio ?? message.video ??
           message.sticker;
         const preview = previewFor(message.type, textBody ?? undefined);
+        // Timestamp asli dari WhatsApp (detik epoch). Dipakai untuk urutan
+        // pesan & hitung jendela 24 jam.
+        const waTimestamp = new Date(
+          Number(message.timestamp) * 1000,
+        ).toISOString();
 
         // Cari apakah sudah ada percakapan dengan nomor pengirim ini.
         const { data: existingConversation } = await admin
           .from("conversations")
-          .select("id, unread_count")
+          .select("id")
           .eq("channel", "whatsapp")
           .eq("external_contact_id", message.from)
           .maybeSingle();
@@ -89,7 +99,8 @@ export async function POST(request: NextRequest) {
         let conversationId: string;
 
         if (existingConversation) {
-          // Sudah ada percakapan — tinggal update ringkasan & unread count.
+          // Sudah ada percakapan — update ringkasannya. unread_count naik
+          // otomatis lewat trigger saat pesan di bawah ini di-insert.
           conversationId = existingConversation.id;
           await admin
             .from("conversations")
@@ -97,7 +108,6 @@ export async function POST(request: NextRequest) {
               display_name: contactName ?? undefined,
               last_message_at: new Date().toISOString(),
               last_message_preview: preview,
-              unread_count: existingConversation.unread_count + 1,
             })
             .eq("id", conversationId);
         } else {
@@ -125,7 +135,8 @@ export async function POST(request: NextRequest) {
               assigned_to: matchedLead?.assigned_to ?? null,
               last_message_at: new Date().toISOString(),
               last_message_preview: preview,
-              unread_count: 1,
+              // unread_count mulai 0 — trigger yang menaikkannya saat pesan di-insert.
+              unread_count: 0,
             })
             .select("id")
             .single();
@@ -136,20 +147,43 @@ export async function POST(request: NextRequest) {
 
         // Simpan pesannya sendiri. `upsert` + ignoreDuplicates supaya aman
         // kalau Meta kirim ulang webhook yang sama (retry) — tidak dobel.
-        await admin.from("messages").upsert(
-          {
-            conversation_id: conversationId,
-            direction: "inbound",
-            wa_message_id: message.id,
-            type: messageType,
-            text_body: textBody,
-            media_id: media?.id ?? null,
-            media_mime_type: media?.mime_type ?? null,
-            status: "sent",
-            raw: message,
-          },
-          { onConflict: "wa_message_id", ignoreDuplicates: true },
-        );
+        // `.select()` mengembalikan baris HANYA kalau benar-benar baru di-insert
+        // (kalau duplikat, hasilnya kosong) — dipakai untuk memutuskan apakah
+        // perlu unduh media.
+        const { data: insertedMessages } = await admin
+          .from("messages")
+          .upsert(
+            {
+              conversation_id: conversationId,
+              direction: "inbound",
+              wa_message_id: message.id,
+              type: messageType,
+              text_body: textBody,
+              media_id: media?.id ?? null,
+              media_mime_type: media?.mime_type ?? null,
+              media_status: media ? "pending" : "none",
+              status: "sent",
+              wa_timestamp: waTimestamp,
+              raw: message,
+            },
+            { onConflict: "wa_message_id", ignoreDuplicates: true },
+          )
+          .select("id");
+
+        const isNewMessage = (insertedMessages ?? []).length > 0;
+
+        // Pesan media yang baru masuk: unduh filenya & simpan ke Storage
+        // setelah respons dikirim (after()), supaya webhook tetap cepat.
+        if (isNewMessage && media?.id) {
+          after(() =>
+            storeInboundMedia(admin, {
+              waMessageId: message.id,
+              mediaId: media.id,
+              mimeType: media.mime_type,
+              filename: message.document?.filename ?? null,
+            }),
+          );
+        }
       }
 
       // --- Bagian 2: update status pesan yang KITA kirim (terkirim/dibaca/gagal) ---

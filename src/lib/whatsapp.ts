@@ -51,6 +51,139 @@ export async function sendTextMessage(
   return { waMessageId };
 }
 
+function requireWhatsappCreds(): { phoneNumberId: string; accessToken: string } {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  if (!phoneNumberId || !accessToken) {
+    throw new WhatsappApiError("WhatsApp Cloud API belum dikonfigurasi.");
+  }
+  return { phoneNumberId, accessToken };
+}
+
+/** Jenis media yang bisa dikirim keluar lewat Cloud API. */
+export type OutboundMediaType = "image" | "document" | "audio" | "video";
+
+/**
+ * Ambil URL unduhan sementara untuk sebuah media WhatsApp (dari media id yang
+ * datang di webhook). URL-nya berlaku singkat (~5 menit) dan tetap butuh
+ * bearer token saat diunduh — lihat downloadMedia().
+ */
+export async function getMediaUrl(
+  mediaId: string,
+): Promise<{ url: string; mimeType: string; fileSize: number }> {
+  const { accessToken } = requireWhatsappCreds();
+  const res = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${mediaId}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  const data = await res.json();
+  if (!res.ok || !data?.url) {
+    const message =
+      data?.error?.message ?? `Gagal ambil URL media (HTTP ${res.status}).`;
+    throw new WhatsappApiError(message);
+  }
+  return {
+    url: data.url,
+    mimeType: data.mime_type ?? "application/octet-stream",
+    fileSize: Number(data.file_size ?? 0),
+  };
+}
+
+/** Unduh isi biner sebuah media dari URL yang dikasih getMediaUrl(). */
+export async function downloadMedia(
+  url: string,
+): Promise<{ bytes: ArrayBuffer; contentType: string }> {
+  const { accessToken } = requireWhatsappCreds();
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    throw new WhatsappApiError(`Gagal unduh media (HTTP ${res.status}).`);
+  }
+  const bytes = await res.arrayBuffer();
+  return {
+    bytes,
+    contentType: res.headers.get("content-type") ?? "application/octet-stream",
+  };
+}
+
+/**
+ * Kirim pesan media (gambar/dokumen/audio/video) lewat Cloud API dengan cara
+ * "link" — Meta yang mengunduh file dari URL yang kita kasih (harus HTTPS &
+ * bisa diakses publik untuk sesaat, mis. signed URL dari Supabase Storage).
+ */
+export async function sendMediaMessage(
+  to: string,
+  opts: {
+    type: OutboundMediaType;
+    link: string;
+    filename?: string;
+    caption?: string;
+  },
+): Promise<{ waMessageId: string }> {
+  const { phoneNumberId, accessToken } = requireWhatsappCreds();
+
+  const mediaObject: Record<string, string> = { link: opts.link };
+  if (opts.filename && opts.type === "document") {
+    mediaObject.filename = opts.filename;
+  }
+  if (opts.caption && (opts.type === "image" || opts.type === "video")) {
+    mediaObject.caption = opts.caption;
+  }
+
+  const res = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: opts.type,
+        [opts.type]: mediaObject,
+      }),
+    },
+  );
+
+  const data = await res.json();
+  if (!res.ok) {
+    const message =
+      data?.error?.message ?? `Gagal kirim media (HTTP ${res.status}).`;
+    throw new WhatsappApiError(message);
+  }
+  const waMessageId = data?.messages?.[0]?.id;
+  if (!waMessageId) {
+    throw new WhatsappApiError("Respons WhatsApp API tidak berisi message id.");
+  }
+  return { waMessageId };
+}
+
+/**
+ * Kirim tanda "sudah dibaca" (centang biru) ke WhatsApp untuk sebuah pesan
+ * masuk. Best-effort — kalau gagal, tidak apa-apa (tidak dilempar ke UI).
+ */
+export async function markMessageRead(waMessageId: string): Promise<void> {
+  const { phoneNumberId, accessToken } = requireWhatsappCreds();
+  await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: waMessageId,
+      }),
+    },
+  );
+}
+
 /** Verifikasi header X-Hub-Signature-256 dari webhook Meta. */
 export function verifyWebhookSignature(
   rawBody: string,
@@ -82,7 +215,7 @@ export type WhatsappWebhookPayload = {
           type: string;
           text?: { body: string };
           image?: { id: string; mime_type: string };
-          document?: { id: string; mime_type: string };
+          document?: { id: string; mime_type: string; filename?: string };
           audio?: { id: string; mime_type: string };
           video?: { id: string; mime_type: string };
           sticker?: { id: string; mime_type: string };

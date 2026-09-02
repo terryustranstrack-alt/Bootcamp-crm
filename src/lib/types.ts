@@ -129,9 +129,11 @@ export type MessageType =
 
 export type MessageStatus = "pending" | "sent" | "delivered" | "read" | "failed";
 
-// Satu pesan di dalam sebuah percakapan. Pesan media (gambar/dokumen/dll.)
-// hanya disimpan metadatanya (media_id/mime_type), tidak ada viewer media
-// penuh di versi ini — lihat komponen InboxView.
+// Status unduhan file media ke Supabase Storage: 'none' = bukan pesan media,
+// 'pending' = sedang/antre diunduh, 'stored' = sudah tersimpan, 'failed' = gagal.
+export type MediaStatus = "none" | "pending" | "stored" | "failed";
+
+// Satu pesan di dalam sebuah percakapan.
 export type Message = {
   id: string;
   conversation_id: string;
@@ -139,10 +141,14 @@ export type Message = {
   wa_message_id: string | null; // id pesan dari WhatsApp, dipakai cocokkan status delivery/read
   type: MessageType;
   text_body: string | null;
-  media_id: string | null;
+  media_id: string | null; // id media di sisi Meta
   media_mime_type: string | null;
+  media_path: string | null; // path file di bucket "whatsapp-media" kalau sudah diunduh
+  media_filename: string | null; // nama file asli (untuk dokumen)
+  media_status: MediaStatus;
   status: MessageStatus;
   error_message: string | null;
   sent_by: string | null; // user yang kirim, hanya diisi untuk pesan outbound
+  wa_timestamp: string | null; // waktu asli dari WhatsApp (dipakai untuk urutan)
   created_at: string;
 };

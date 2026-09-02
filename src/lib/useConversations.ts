@@ -53,6 +53,10 @@ export function useMessages(conversationId: string | null) {
       .from("messages")
       .select("*")
       .eq("conversation_id", id)
+      // Urut pakai wa_timestamp (waktu asli WhatsApp) supaya pesan yang
+      // webhook-nya telat tetap muncul di posisi yang benar; created_at
+      // sebagai tie-breaker.
+      .order("wa_timestamp", { ascending: true, nullsFirst: true })
       .order("created_at", { ascending: true });
     if (data) setMessages(data as Message[]);
   }

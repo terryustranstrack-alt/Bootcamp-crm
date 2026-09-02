@@ -229,13 +229,20 @@ create table if not exists messages (
   type text not null default 'text'
     check (type in ('text', 'image', 'document', 'audio', 'video', 'sticker', 'location', 'unsupported')),
   text_body text,
-  media_id text,
+  media_id text,          -- id media di sisi Meta (dari webhook)
   media_mime_type text,
+  -- Ditambah di 0010 — media yang sudah diunduh & disimpan ke Storage.
+  media_path text,        -- path di bucket "whatsapp-media"
+  media_filename text,    -- nama file asli (untuk dokumen)
+  media_status text not null default 'none'
+    check (media_status in ('none', 'pending', 'stored', 'failed')),
   status text not null default 'sent'
     check (status in ('pending', 'sent', 'delivered', 'read', 'failed')),
   error_message text,
   sent_by uuid references profiles(id) on delete set null,
   raw jsonb,
+  -- wa_timestamp (0010): waktu asli dari WhatsApp, buat urutan & jendela 24 jam.
+  wa_timestamp timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -276,6 +283,33 @@ create policy "update own outbound messages"
   to authenticated
   using (sent_by = auth.uid())
   with check (sent_by = auth.uid());
+
+-- 0010: unread_count naik otomatis tiap ada pesan inbound (atomic, anti-balapan).
+create or replace function public.bump_unread_on_inbound()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if new.direction = 'inbound' then
+    update conversations
+      set unread_count = unread_count + 1
+      where id = new.conversation_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_message_inserted_bump_unread on messages;
+create trigger on_message_inserted_bump_unread
+  after insert on messages
+  for each row execute function public.bump_unread_on_inbound();
+
+-- 0010: bucket privat untuk media WhatsApp. Upload & baca semua lewat server
+-- (service-role, bypass RLS) — tidak perlu policy di storage.objects.
+insert into storage.buckets (id, name, public)
+  values ('whatsapp-media', 'whatsapp-media', false)
+  on conflict (id) do nothing;
 
 alter publication supabase_realtime add table conversations;
 alter publication supabase_realtime add table messages;

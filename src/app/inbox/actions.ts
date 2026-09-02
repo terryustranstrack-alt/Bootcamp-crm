@@ -1,15 +1,68 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendTextMessage, WhatsappApiError } from "@/lib/whatsapp";
+import {
+  markMessageRead,
+  sendMediaMessage,
+  sendTextMessage,
+  WhatsappApiError,
+  type OutboundMediaType,
+} from "@/lib/whatsapp";
 
 export type InboxActionState = { error?: string; success?: boolean } | undefined;
 
-// Kirim balasan WhatsApp dari CRM: simpan pesan sebagai "pending" dulu,
-// baru kirim beneran lewat WhatsApp Cloud API, lalu update status pesan
-// jadi "sent" atau "failed" sesuai hasilnya.
+type ServerClient = Awaited<ReturnType<typeof createClient>>;
+
+// Update ringkasan percakapan setelah sebuah pesan keluar terkirim.
+async function touchConversation(
+  supabase: ServerClient,
+  conversationId: string,
+  preview: string,
+) {
+  await supabase
+    .from("conversations")
+    .update({
+      last_message_at: new Date().toISOString(),
+      last_message_preview: preview.slice(0, 200),
+      unread_count: 0,
+    })
+    .eq("id", conversationId);
+}
+
+// Kirim isi teks sebuah pesan outbound yang sudah tersimpan (status "pending"
+// atau "failed") ke WhatsApp, lalu tandai baris pesannya "sent" atau "failed".
+// Dipakai bareng oleh sendMessage (pesan baru) dan retryMessage (kirim ulang).
+async function deliverText(
+  supabase: ServerClient,
+  messageId: string,
+  to: string,
+  text: string,
+): Promise<{ error?: string }> {
+  try {
+    const { waMessageId } = await sendTextMessage(to, text);
+    await supabase
+      .from("messages")
+      .update({ status: "sent", wa_message_id: waMessageId, error_message: null })
+      .eq("id", messageId);
+    return {};
+  } catch (e) {
+    // Gagal kirim (mis. sudah lewat 24 jam sejak pesan terakhir kontak, atau
+    // kredensial API salah) — tandai gagal, jangan biarkan nyangkut "pending".
+    const message =
+      e instanceof WhatsappApiError ? e.message : "Failed to send message.";
+    await supabase
+      .from("messages")
+      .update({ status: "failed", error_message: message })
+      .eq("id", messageId);
+    return { error: message };
+  }
+}
+
+// Kirim balasan teks WhatsApp dari CRM: simpan pesan "pending" dulu, baru
+// kirim beneran, lalu update statusnya.
 export async function sendMessage(
   conversationId: string,
   text: string,
@@ -42,6 +95,7 @@ export async function sendMessage(
       text_body: trimmedText,
       status: "pending",
       sent_by: user.id,
+      wa_timestamp: new Date().toISOString(),
     })
     .select("id")
     .single();
@@ -50,20 +104,155 @@ export async function sendMessage(
     return { error: insertError?.message ?? "Failed to save message." };
   }
 
+  const result = await deliverText(
+    supabase,
+    insertedMessage.id,
+    conversation.external_contact_id,
+    trimmedText,
+  );
+  if (result.error) return { error: result.error };
+
+  await touchConversation(supabase, conversationId, trimmedText);
+  revalidatePath("/inbox");
+  return { success: true };
+}
+
+// Kirim ulang sebuah pesan teks outbound yang tadinya gagal.
+export async function retryMessage(
+  messageId: string,
+): Promise<InboxActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not logged in." };
+
+  const { data: message, error: messageError } = await supabase
+    .from("messages")
+    .select("id, conversation_id, direction, type, text_body, status, sent_by")
+    .eq("id", messageId)
+    .single();
+
+  if (messageError || !message) {
+    return { error: "Message not found or inaccessible." };
+  }
+  if (
+    message.direction !== "outbound" ||
+    message.status !== "failed" ||
+    message.type !== "text"
+  ) {
+    return { error: "This message can't be retried." };
+  }
+  if (message.sent_by !== user.id) {
+    return { error: "Only the original sender can retry this message." };
+  }
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("id, external_contact_id")
+    .eq("id", message.conversation_id)
+    .single();
+  if (!conversation) {
+    return { error: "Conversation not found or inaccessible." };
+  }
+
+  await supabase
+    .from("messages")
+    .update({ status: "pending", error_message: null })
+    .eq("id", messageId);
+
+  const result = await deliverText(
+    supabase,
+    messageId,
+    conversation.external_contact_id,
+    message.text_body ?? "",
+  );
+  if (result.error) return { error: result.error };
+
+  await touchConversation(supabase, conversation.id, message.text_body ?? "");
+  revalidatePath("/inbox");
+  return { success: true };
+}
+
+// Kirim lampiran (gambar/dokumen/audio/video) yang sudah diupload sales ke
+// bucket "whatsapp-media". Meta mengunduh filenya dari signed URL sementara.
+export async function sendMedia(
+  conversationId: string,
+  storagePath: string,
+  type: OutboundMediaType,
+  filename?: string,
+  caption?: string,
+): Promise<InboxActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not logged in." };
+
+  const { data: conversation, error: conversationError } = await supabase
+    .from("conversations")
+    .select("id, external_contact_id")
+    .eq("id", conversationId)
+    .single();
+  if (conversationError || !conversation) {
+    return { error: "Conversation not found or inaccessible." };
+  }
+
+  const trimmedCaption = caption?.trim() || null;
+  const { data: insertedMessage, error: insertError } = await supabase
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      direction: "outbound",
+      type,
+      text_body: trimmedCaption,
+      media_path: storagePath,
+      media_filename: filename ?? null,
+      media_status: "stored",
+      status: "pending",
+      sent_by: user.id,
+      wa_timestamp: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (insertError || !insertedMessage) {
+    return { error: insertError?.message ?? "Failed to save message." };
+  }
+
+  // Signed URL berlaku 5 menit — cukup buat Meta mengunduhnya sekali.
+  const admin = createAdminClient();
+  const { data: signed, error: signError } = await admin.storage
+    .from("whatsapp-media")
+    .createSignedUrl(storagePath, 300);
+
+  if (signError || !signed?.signedUrl) {
+    await supabase
+      .from("messages")
+      .update({ status: "failed", error_message: "Couldn't prepare the file." })
+      .eq("id", insertedMessage.id);
+    return { error: "Couldn't prepare the file." };
+  }
+
+  const preview = trimmedCaption ?? filename ?? `[${type}]`;
+
   try {
-    const { waMessageId } = await sendTextMessage(
+    const { waMessageId } = await sendMediaMessage(
       conversation.external_contact_id,
-      trimmedText,
+      {
+        type,
+        link: signed.signedUrl,
+        filename,
+        caption: trimmedCaption ?? undefined,
+      },
     );
     await supabase
       .from("messages")
-      .update({ status: "sent", wa_message_id: waMessageId })
+      .update({ status: "sent", wa_message_id: waMessageId, error_message: null })
       .eq("id", insertedMessage.id);
   } catch (e) {
-    // Gagal kirim (mis. sudah lewat 24 jam sejak pesan terakhir kontak,
-    // atau kredensial API salah) — tandai pesan gagal, jangan biarkan
-    // tersangkut selamanya di status "pending".
-    const message = e instanceof WhatsappApiError ? e.message : "Failed to send message.";
+    const message =
+      e instanceof WhatsappApiError ? e.message : "Failed to send file.";
     await supabase
       .from("messages")
       .update({ status: "failed", error_message: message })
@@ -71,13 +260,102 @@ export async function sendMessage(
     return { error: message };
   }
 
+  await touchConversation(supabase, conversationId, preview);
+  revalidatePath("/inbox");
+  return { success: true };
+}
+
+const MAX_ATTACHMENT_BYTES = 16 * 1024 * 1024;
+
+// Jenis media keluar dari mime type file.
+function mediaTypeFromMime(mime: string): OutboundMediaType {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.startsWith("video/")) return "video";
+  return "document";
+}
+
+// Terima file lampiran dari inbox, upload ke bucket "whatsapp-media" pakai
+// service-role (bypass RLS), lalu kirim lewat sendMedia. Dipakai supaya
+// browser tidak perlu izin tulis langsung ke Storage.
+export async function sendMediaAttachment(
+  conversationId: string,
+  formData: FormData,
+): Promise<InboxActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not logged in." };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "No file selected." };
+  }
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    return { error: "File is too large (max 16 MB)." };
+  }
+
+  // Pastikan user memang berhak akses percakapan ini.
+  const { data: conversation, error: conversationError } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("id", conversationId)
+    .single();
+  if (conversationError || !conversation) {
+    return { error: "Conversation not found or inaccessible." };
+  }
+
+  const safeName = file.name.replace(/[^\w.\-]+/g, "_") || "file";
+  const path = `outbound/${randomUUID()}-${safeName}`;
+  const admin = createAdminClient();
+  const { error: uploadError } = await admin.storage
+    .from("whatsapp-media")
+    .upload(path, file, {
+      contentType: file.type || "application/octet-stream",
+    });
+  if (uploadError) return { error: uploadError.message };
+
+  return sendMedia(
+    conversationId,
+    path,
+    mediaTypeFromMime(file.type),
+    file.name,
+  );
+}
+
+// Tandai percakapan sudah dibaca: reset unread_count di CRM + kirim tanda
+// "dibaca" (centang biru) ke WhatsApp untuk pesan masuk terakhir.
+export async function markConversationRead(
+  conversationId: string,
+): Promise<InboxActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not logged in." };
+
+  const { data: lastInbound } = await supabase
+    .from("messages")
+    .select("wa_message_id")
+    .eq("conversation_id", conversationId)
+    .eq("direction", "inbound")
+    .not("wa_message_id", "is", null)
+    .order("wa_timestamp", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (lastInbound?.wa_message_id) {
+    try {
+      await markMessageRead(lastInbound.wa_message_id);
+    } catch {
+      // Best-effort — kalau gagal, tanda "dibaca" cuma tidak terkirim.
+    }
+  }
+
   await supabase
     .from("conversations")
-    .update({
-      last_message_at: new Date().toISOString(),
-      last_message_preview: trimmedText.slice(0, 200),
-      unread_count: 0,
-    })
+    .update({ unread_count: 0 })
     .eq("id", conversationId);
 
   revalidatePath("/inbox");
