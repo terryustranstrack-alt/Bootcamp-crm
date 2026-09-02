@@ -5,6 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { logNote, logStatusChange } from "@/lib/activity";
+import {
+  buildLeadUpdate,
+  leadToEditForm,
+  type LeadEditForm,
+} from "@/lib/leadEdit";
 import { useSumberOptions } from "@/lib/useSumberOptions";
 import { useProfiles, profileLabel } from "@/lib/useProfiles";
 import { useCurrentProfile } from "@/lib/useCurrentProfile";
@@ -35,12 +40,16 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<LeadEditForm>({
     nama: "",
     kontak: "",
     sumber: "",
     produk: "",
     estimasi_nilai: "",
+    kota: "",
+    perusahaan: "",
+    jabatan: "",
+    catatan: "",
     assigned_to: "",
   });
   const [saving, setSaving] = useState(false);
@@ -161,60 +170,28 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
   // Isi form edit dengan data lead saat ini, lalu buka mode edit.
   function startEdit() {
     if (!lead) return;
-    setEditForm({
-      nama: lead.nama,
-      kontak: lead.kontak,
-      sumber: lead.sumber ?? "",
-      produk: lead.produk ?? "",
-      estimasi_nilai:
-        lead.estimasi_nilai != null ? String(lead.estimasi_nilai) : "",
-      assigned_to: lead.assigned_to ?? "",
-    });
+    setEditForm(leadToEditForm(lead));
     setIsEditing(true);
   }
 
-  // Simpan perubahan dari form edit. Selain update baris lead-nya, dicatat
-  // juga daftar field mana saja yang benar-benar berubah (`perubahan`),
-  // supaya riwayat aktivitas menunjukkan ringkasan yang berguna
+  // Simpan perubahan dari form edit. Payload update + daftar field yang
+  // benar-benar berubah dibangun di buildLeadUpdate (dipakai bareng dengan
+  // ProspekTable). Ringkasan perubahannya dicatat ke riwayat aktivitas
   // ("Lead data updated: name, product.") bukan cuma "diedit".
   async function handleSaveEdit(e: FormEvent) {
     e.preventDefault();
     if (!lead) return;
     setSaving(true);
 
-    const sumberBaru = editForm.sumber || null;
-    const produkBaru = editForm.produk || null;
-    const estimasiBaru = editForm.estimasi_nilai
-      ? Number(editForm.estimasi_nilai)
-      : null;
-
-    const perubahan: string[] = [];
-    if (editForm.nama !== lead.nama) perubahan.push("name");
-    if (editForm.kontak !== lead.kontak) perubahan.push("contact");
-    if (sumberBaru !== lead.sumber) perubahan.push("source");
-    if (produkBaru !== lead.produk) perubahan.push("product");
-    if (estimasiBaru !== lead.estimasi_nilai) perubahan.push("estimated value");
-
-    // Non-admin (sales) tidak boleh ubah assignee — lead tetap milik mereka
-    // sendiri (assigned_to/created_by), lihat migration 0007.
-    const assignedToBaru = currentProfile?.is_admin
-      ? editForm.assigned_to || null
-      : lead.assigned_to;
-    if (currentProfile?.is_admin && assignedToBaru !== lead.assigned_to) {
-      perubahan.push("assignee");
-    }
+    const { update, changedLabels } = buildLeadUpdate(
+      editForm,
+      lead,
+      !!currentProfile?.is_admin,
+    );
 
     const { error } = await supabase
       .from("leads")
-      .update({
-        nama: editForm.nama,
-        kontak: editForm.kontak,
-        sumber: sumberBaru,
-        produk: produkBaru,
-        estimasi_nilai: estimasiBaru,
-        assigned_to: assignedToBaru,
-        tanggal_update: new Date().toISOString(),
-      })
+      .update(update)
       .eq("id", leadId);
 
     if (error) {
@@ -223,11 +200,11 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
       return;
     }
 
-    if (perubahan.length > 0) {
+    if (changedLabels.length > 0) {
       const activityError = await logNote(
         supabase,
         leadId,
-        `Lead data updated: ${perubahan.join(", ")}.`,
+        `Lead data updated: ${changedLabels.join(", ")}.`,
       );
       if (activityError) setError(activityError);
     }
@@ -363,6 +340,48 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
           </div>
 
           <div className="flex flex-col gap-1">
+            <label htmlFor="edit-perusahaan" className="text-sm font-medium">
+              Company
+            </label>
+            <input
+              id="edit-perusahaan"
+              value={editForm.perusahaan}
+              onChange={(e) =>
+                setEditForm({ ...editForm, perusahaan: e.target.value })
+              }
+              className="border rounded px-3 py-2"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="edit-jabatan" className="text-sm font-medium">
+              Job title
+            </label>
+            <input
+              id="edit-jabatan"
+              value={editForm.jabatan}
+              onChange={(e) =>
+                setEditForm({ ...editForm, jabatan: e.target.value })
+              }
+              className="border rounded px-3 py-2"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="edit-kota" className="text-sm font-medium">
+              City/region
+            </label>
+            <input
+              id="edit-kota"
+              value={editForm.kota}
+              onChange={(e) =>
+                setEditForm({ ...editForm, kota: e.target.value })
+              }
+              className="border rounded px-3 py-2"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
             <label htmlFor="edit-produk" className="text-sm font-medium">
               Product/need
             </label>
@@ -389,6 +408,21 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               onChange={(estimasi_nilai) =>
                 setEditForm({ ...editForm, estimasi_nilai })
               }
+              className="border rounded px-3 py-2"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="edit-catatan" className="text-sm font-medium">
+              Notes / requirements
+            </label>
+            <textarea
+              id="edit-catatan"
+              value={editForm.catatan}
+              onChange={(e) =>
+                setEditForm({ ...editForm, catatan: e.target.value })
+              }
+              rows={3}
               className="border rounded px-3 py-2"
             />
           </div>
@@ -439,6 +473,15 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
           <dt className="text-gray-500">Source</dt>
           <dd>{lead.sumber || "-"}</dd>
 
+          <dt className="text-gray-500">Company</dt>
+          <dd>{lead.perusahaan || "-"}</dd>
+
+          <dt className="text-gray-500">Job title</dt>
+          <dd>{lead.jabatan || "-"}</dd>
+
+          <dt className="text-gray-500">City/region</dt>
+          <dd>{lead.kota || "-"}</dd>
+
           <dt className="text-gray-500">Product/need</dt>
           <dd>{lead.produk || "-"}</dd>
 
@@ -475,6 +518,15 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
         </dl>
       )}
 
+      {!isEditing && lead.catatan && (
+        <div>
+          <h2 className="font-medium mb-2">Notes / requirements</h2>
+          <pre className="whitespace-pre-wrap text-sm bg-gray-50 border rounded p-3">
+            {lead.catatan}
+          </pre>
+        </div>
+      )}
+
       <div>
         <h2 className="font-medium mb-2">Activity history</h2>
         <form onSubmit={handleAddCatatan} className="flex flex-col gap-2 mb-4">
@@ -493,17 +545,6 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
             {submitting ? "Saving..." : "Add Note"}
           </button>
         </form>
-
-        {lead.catatan && (
-          <div className="mb-4">
-            <p className="text-xs text-gray-500 mb-1">
-              Old note (before activity history was added)
-            </p>
-            <pre className="whitespace-pre-wrap text-sm bg-gray-50 border rounded p-3">
-              {lead.catatan}
-            </pre>
-          </div>
-        )}
 
         <ul className="flex flex-col gap-3">
           {activities.length === 0 && (

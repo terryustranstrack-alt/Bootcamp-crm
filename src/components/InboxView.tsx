@@ -6,10 +6,13 @@ import { createClient } from "@/lib/supabase/client";
 import { useConversations, useMessages } from "@/lib/useConversations";
 import {
   claimConversation,
-  createLeadFromConversation,
   linkConversationToLead,
   sendMessage,
+  transferConversation,
 } from "@/app/inbox/actions";
+import LeadForm from "@/components/LeadForm";
+import { useProfiles, profileLabel } from "@/lib/useProfiles";
+import { useCurrentProfile } from "@/lib/useCurrentProfile";
 import type { Conversation, Lead } from "@/lib/types";
 
 const supabase = createClient();
@@ -27,8 +30,11 @@ export default function InboxView() {
   >(null);
   const messages = useMessages(selectedConversationId);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const profiles = useProfiles();
+  const { profile: currentProfile } = useCurrentProfile();
   const [leadSearchQuery, setLeadSearchQuery] = useState("");
   const [showLinkSearch, setShowLinkSearch] = useState(false);
+  const [showNewLeadForm, setShowNewLeadForm] = useState(false);
   const [draftText, setDraftText] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -61,6 +67,16 @@ export default function InboxView() {
   const linkedLead = selectedConversation?.lead_id
     ? (leads.find((l) => l.id === selectedConversation.lead_id) ?? null)
     : null;
+
+  const assigneeProfile =
+    profiles.find((p) => p.id === selectedConversation?.assigned_to) ?? null;
+
+  // Boleh ganti assignee kalau: admin, atau percakapan ini memang dipegang
+  // sendiri, atau percakapan belum dipegang siapa-siapa (masih di pool).
+  const canAssign =
+    !!currentProfile?.is_admin ||
+    !selectedConversation?.assigned_to ||
+    selectedConversation.assigned_to === currentProfile?.id;
 
   // WhatsApp cuma izinkan balas teks bebas dalam 24 jam sejak pesan
   // terakhir DARI kontak ("customer service window"). Di luar itu, harus
@@ -110,6 +126,19 @@ export default function InboxView() {
     });
   }
 
+  // Ganti sales penanggung jawab percakapan (atau lepas ke pool = null).
+  function handleAssign(toProfileId: string | null) {
+    if (!selectedConversationId) return;
+    setActionError(null);
+    startTransition(async () => {
+      const result = await transferConversation(
+        selectedConversationId,
+        toProfileId,
+      );
+      if (result?.error) setActionError(result.error);
+    });
+  }
+
   function handleLink(leadId: string) {
     if (!selectedConversationId) return;
     setActionError(null);
@@ -128,17 +157,20 @@ export default function InboxView() {
     });
   }
 
-  function handleCreateLead() {
-    if (!selectedConversationId || !selectedConversation) return;
+  // Dipanggil setelah LeadForm di panel Inbox berhasil membuat lead baru —
+  // langsung hubungkan lead itu ke percakapan yang sedang dibuka.
+  function handleNewLeadSaved(leadId: string) {
+    if (!selectedConversationId) return;
     setActionError(null);
     startTransition(async () => {
-      const result = await createLeadFromConversation(
+      const result = await linkConversationToLead(
         selectedConversationId,
-        contactLabel(selectedConversation),
+        leadId,
       );
       if (result?.error) {
         setActionError(result.error);
       } else {
+        setShowNewLeadForm(false);
         setShowLinkSearch(false);
         loadLeads();
       }
@@ -162,7 +194,11 @@ export default function InboxView() {
             <button
               key={conversation.id}
               type="button"
-              onClick={() => setSelectedConversationId(conversation.id)}
+              onClick={() => {
+                setSelectedConversationId(conversation.id);
+                setShowLinkSearch(false);
+                setShowNewLeadForm(false);
+              }}
               className={`text-left px-4 py-3 border-b hover:bg-gray-50 ${
                 selectedConversationId === conversation.id ? "bg-gray-100" : ""
               }`}
@@ -201,20 +237,46 @@ export default function InboxView() {
         ) : (
           <>
             <div className="border-b px-4 py-3 flex items-center justify-between gap-4 shrink-0">
-              <div>
+              <div className="min-w-0">
                 <p className="font-medium">{contactLabel(selectedConversation)}</p>
-                <p className="text-xs text-gray-500">
-                  {linkedLead ? (
-                    <Link
-                      href={`/leads/${linkedLead.id}`}
-                      className="hover:underline"
-                    >
-                      Lead: {linkedLead.nama}
-                    </Link>
-                  ) : (
-                    "Not linked to a lead"
-                  )}
-                </p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                  <span>
+                    {linkedLead ? (
+                      <Link
+                        href={`/leads/${linkedLead.id}`}
+                        className="hover:underline"
+                      >
+                        Lead: {linkedLead.nama}
+                      </Link>
+                    ) : (
+                      "Not linked to a lead"
+                    )}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    Assigned to:
+                    {canAssign ? (
+                      <select
+                        value={selectedConversation.assigned_to ?? ""}
+                        onChange={(e) => handleAssign(e.target.value || null)}
+                        disabled={isPending}
+                        className="border rounded px-1 py-0.5 text-xs disabled:opacity-50"
+                      >
+                        <option value="">Unclaimed</option>
+                        {profiles.map((profile) => (
+                          <option key={profile.id} value={profile.id}>
+                            {profileLabel(profile)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-gray-700">
+                        {assigneeProfile
+                          ? profileLabel(assigneeProfile)
+                          : "Unclaimed"}
+                      </span>
+                    )}
+                  </span>
+                </div>
               </div>
               <div className="flex gap-2 shrink-0">
                 {!selectedConversation.assigned_to && (
@@ -229,7 +291,10 @@ export default function InboxView() {
                 )}
                 <button
                   type="button"
-                  onClick={() => setShowLinkSearch((v) => !v)}
+                  onClick={() => {
+                    setShowLinkSearch((v) => !v);
+                    setShowNewLeadForm(false);
+                  }}
                   className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50"
                 >
                   {linkedLead ? "Change Lead" : "Link to Lead"}
@@ -238,37 +303,53 @@ export default function InboxView() {
             </div>
 
             {showLinkSearch && (
-              <div className="border-b px-4 py-3 bg-gray-50 shrink-0">
+              <div className="border-b px-4 py-3 bg-gray-50 shrink-0 max-h-[60vh] overflow-y-auto">
                 <div className="flex gap-2 mb-2">
                   <input
                     value={leadSearchQuery}
                     onChange={(e) => setLeadSearchQuery(e.target.value)}
                     placeholder="Search lead name/number..."
-                    className="border rounded px-3 py-2 text-sm flex-1"
+                    disabled={showNewLeadForm}
+                    className="border rounded px-3 py-2 text-sm flex-1 disabled:opacity-50"
                   />
                   <button
                     type="button"
-                    onClick={handleCreateLead}
+                    onClick={() => setShowNewLeadForm((v) => !v)}
                     disabled={isPending}
                     className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50 whitespace-nowrap"
                   >
-                    + New Lead
+                    {showNewLeadForm ? "Cancel" : "+ New Lead"}
                   </button>
                 </div>
-                {leadSearchResults.length > 0 && (
-                  <ul className="flex flex-col gap-1 max-h-40 overflow-y-auto">
-                    {leadSearchResults.map((l) => (
-                      <li key={l.id}>
-                        <button
-                          type="button"
-                          onClick={() => handleLink(l.id)}
-                          className="text-sm text-left w-full px-2 py-1 rounded hover:bg-white"
-                        >
-                          {l.nama} · {l.kontak}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+
+                {showNewLeadForm ? (
+                  // Form lengkap: nomor kontak & sumber "WhatsApp" sudah diisi
+                  // dari percakapan; sisanya diketik sales. Setelah tersimpan,
+                  // lead otomatis di-link ke percakapan ini (handleNewLeadSaved).
+                  <LeadForm
+                    initialValues={{
+                      kontak: selectedConversation.external_contact_id,
+                      nama: selectedConversation.display_name ?? "",
+                      sumber: "WhatsApp",
+                    }}
+                    onSaved={handleNewLeadSaved}
+                  />
+                ) : (
+                  leadSearchResults.length > 0 && (
+                    <ul className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+                      {leadSearchResults.map((l) => (
+                        <li key={l.id}>
+                          <button
+                            type="button"
+                            onClick={() => handleLink(l.id)}
+                            className="text-sm text-left w-full px-2 py-1 rounded hover:bg-white"
+                          >
+                            {l.nama} · {l.kontak}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )
                 )}
               </div>
             )}

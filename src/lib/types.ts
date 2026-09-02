@@ -59,9 +59,12 @@ export type Lead = {
   status: LeadStatus;
   tanggal_masuk: string;
   tanggal_update: string;
-  catatan: string; // catatan lama sebelum fitur riwayat aktivitas ada
+  catatan: string; // field "Notes / requirements" — catatan bebas tentang kebutuhan lead
   produk: string | null;
   estimasi_nilai: number | null; // perkiraan nilai transaksi (rupiah)
+  kota: string | null; // kota/wilayah calon pelanggan
+  perusahaan: string | null; // nama perusahaan/organisasi (untuk lead B2B)
+  jabatan: string | null; // jabatan/peran orang ini di perusahaannya
   assigned_to: string | null; // id sales yang menangani (profiles.id)
   created_by: string | null;
 };

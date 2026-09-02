@@ -17,15 +17,37 @@ const EMPTY_FORM = {
   sumber: "",
   produk: "",
   estimasi_nilai: "",
+  kota: "",
+  perusahaan: "",
+  jabatan: "",
+  catatan: "",
   assigned_to: "",
+};
+
+type LeadFormValues = typeof EMPTY_FORM;
+
+type LeadFormProps = {
+  // Nilai awal yang mengisi sebagian field (mis. dari inbox: nomor kontak &
+  // sumber "WhatsApp" sudah diketahui). Field lain tetap kosong.
+  initialValues?: Partial<LeadFormValues>;
+  // Dipanggil setelah lead berhasil dibuat, dengan id lead barunya. Kalau
+  // diisi, form tidak menampilkan pesan sukses sendiri — pemanggil yang
+  // memutuskan apa berikutnya (mis. inbox: langsung link ke percakapan).
+  onSaved?: (leadId: string) => void;
 };
 
 // Form "Add New Lead". Sebelum benar-benar simpan, dicek dulu apakah
 // nomor kontak sudah pernah terdaftar — kalau iya, tampilkan peringatan dan
 // minta konfirmasi sekali lagi sebelum tetap menyimpan (mencegah duplikat
 // tidak sengaja, tapi tetap mengizinkan kalau memang disengaja).
-export default function LeadForm() {
-  const [form, setForm] = useState(EMPTY_FORM);
+//
+// Dipakai di dua tempat: halaman "/leads/baru" (berdiri sendiri) dan panel
+// "New Lead" di Inbox (dengan initialValues + onSaved).
+export default function LeadForm({ initialValues, onSaved }: LeadFormProps = {}) {
+  const [form, setForm] = useState<LeadFormValues>(() => ({
+    ...EMPTY_FORM,
+    ...initialValues,
+  }));
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,27 +95,44 @@ export default function LeadForm() {
 
     setSubmitting(true);
 
-    const { error } = await supabase.from("leads").insert({
-      nama: form.nama,
-      kontak: form.kontak,
-      sumber: form.sumber || null,
-      produk: form.produk || null,
-      estimasi_nilai: form.estimasi_nilai ? Number(form.estimasi_nilai) : null,
-      assigned_to: currentProfile?.is_admin
-        ? form.assigned_to || null
-        : (currentProfile?.id ?? null),
-    });
+    const { data: newLead, error } = await supabase
+      .from("leads")
+      .insert({
+        nama: form.nama,
+        kontak: form.kontak,
+        sumber: form.sumber || null,
+        produk: form.produk || null,
+        estimasi_nilai: form.estimasi_nilai
+          ? Number(form.estimasi_nilai)
+          : null,
+        kota: form.kota || null,
+        perusahaan: form.perusahaan || null,
+        jabatan: form.jabatan || null,
+        catatan: form.catatan,
+        assigned_to: currentProfile?.is_admin
+          ? form.assigned_to || null
+          : (currentProfile?.id ?? null),
+      })
+      .select("id")
+      .single();
 
     setSubmitting(false);
 
-    if (error) {
-      setError(error.message);
+    if (error || !newLead) {
+      setError(error?.message ?? "Failed to save lead.");
       return;
     }
 
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, ...initialValues });
     setDuplicateWarning(null);
-    setSuccess(true);
+
+    // Kalau dipanggil dengan onSaved (mis. dari Inbox), serahkan ke pemanggil.
+    // Kalau berdiri sendiri, cukup tampilkan pesan sukses.
+    if (onSaved) {
+      onSaved(newLead.id);
+    } else {
+      setSuccess(true);
+    }
   }
 
   return (
@@ -137,6 +176,42 @@ export default function LeadForm() {
       </div>
 
       <div className="flex flex-col gap-1">
+        <label htmlFor="perusahaan" className="text-sm font-medium">
+          Company
+        </label>
+        <input
+          id="perusahaan"
+          value={form.perusahaan}
+          onChange={(e) => setForm({ ...form, perusahaan: e.target.value })}
+          className="border rounded px-3 py-2"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label htmlFor="jabatan" className="text-sm font-medium">
+          Job title
+        </label>
+        <input
+          id="jabatan"
+          value={form.jabatan}
+          onChange={(e) => setForm({ ...form, jabatan: e.target.value })}
+          className="border rounded px-3 py-2"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label htmlFor="kota" className="text-sm font-medium">
+          City/region
+        </label>
+        <input
+          id="kota"
+          value={form.kota}
+          onChange={(e) => setForm({ ...form, kota: e.target.value })}
+          className="border rounded px-3 py-2"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
         <label htmlFor="produk" className="text-sm font-medium">
           Product/need of interest
         </label>
@@ -156,6 +231,19 @@ export default function LeadForm() {
           id="estimasi_nilai"
           value={form.estimasi_nilai}
           onChange={(estimasi_nilai) => setForm({ ...form, estimasi_nilai })}
+          className="border rounded px-3 py-2"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label htmlFor="catatan" className="text-sm font-medium">
+          Notes / requirements
+        </label>
+        <textarea
+          id="catatan"
+          value={form.catatan}
+          onChange={(e) => setForm({ ...form, catatan: e.target.value })}
+          rows={3}
           className="border rounded px-3 py-2"
         />
       </div>

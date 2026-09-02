@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTextMessage, WhatsappApiError } from "@/lib/whatsapp";
 
 export type InboxActionState = { error?: string; success?: boolean } | undefined;
@@ -79,6 +80,59 @@ export async function sendMessage(
     })
     .eq("id", conversationId);
 
+  revalidatePath("/inbox");
+  return { success: true };
+}
+
+// Pindahkan percakapan ke sales lain, atau lepas ke pool kalau toProfileId
+// null. Boleh dilakukan oleh admin, oleh sales yang saat ini memegang
+// percakapan itu, atau kalau percakapan belum dipegang siapa-siapa.
+//
+// Update-nya lewat service-role client karena RLS update biasa (lihat 0008)
+// menolak non-admin yang men-set assigned_to ke orang lain — pengecekan izin
+// dilakukan manual di sini sebelum update.
+export async function transferConversation(
+  conversationId: string,
+  toProfileId: string | null,
+): Promise<InboxActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not logged in." };
+
+  const { data: conversation, error: conversationError } = await supabase
+    .from("conversations")
+    .select("id, assigned_to")
+    .eq("id", conversationId)
+    .single();
+
+  if (conversationError || !conversation) {
+    return { error: "Conversation not found or inaccessible." };
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single();
+
+  const isAdmin = profile?.is_admin ?? false;
+  const isOwner = conversation.assigned_to === user.id;
+  const isUnclaimed = conversation.assigned_to === null;
+  if (!isAdmin && !isOwner && !isUnclaimed) {
+    return {
+      error: "Only an admin or the current owner can reassign this conversation.",
+    };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("conversations")
+    .update({ assigned_to: toProfileId })
+    .eq("id", conversationId);
+
+  if (error) return { error: error.message };
   revalidatePath("/inbox");
   return { success: true };
 }

@@ -11,6 +11,9 @@ const KOLOM: { header: string; value: (lead: Lead) => string }[] = [
   { header: "Name", value: (lead) => lead.nama },
   { header: "Contact", value: (lead) => lead.kontak },
   { header: "Source", value: (lead) => lead.sumber ?? "" },
+  { header: "Company", value: (lead) => lead.perusahaan ?? "" },
+  { header: "Job Title", value: (lead) => lead.jabatan ?? "" },
+  { header: "City", value: (lead) => lead.kota ?? "" },
   { header: "Status", value: (lead) => leadStatusLabel(lead.status) },
   { header: "Product", value: (lead) => lead.produk ?? "" },
   {
@@ -18,6 +21,7 @@ const KOLOM: { header: string; value: (lead: Lead) => string }[] = [
     value: (lead) =>
       lead.estimasi_nilai != null ? String(lead.estimasi_nilai) : "",
   },
+  { header: "Notes", value: (lead) => lead.catatan ?? "" },
   {
     header: "Date Added",
     value: (lead) => new Date(lead.tanggal_masuk).toLocaleString("id-ID"),
@@ -65,6 +69,10 @@ export type NewLeadInput = {
   status: LeadStatus;
   produk: string | null;
   estimasi_nilai: number | null;
+  kota: string | null;
+  perusahaan: string | null;
+  jabatan: string | null;
+  catatan: string;
 };
 
 // Pecah satu baris teks CSV jadi array kolom, dengan menangani kutip ganda
@@ -116,9 +124,11 @@ function findColumnIndex(headerColumns: string[], candidates: string[]): number 
 
 /**
  * Mengenali kolom "Name"/"Nama", "Contact"/"Kontak", "Source"/"Sumber",
- * "Status", "Product"/"Produk", "Estimated Value"/"Estimasi Nilai" (urutan
- * bebas, header lain diabaikan). Baris tanpa nama/kontak dilewati. Tanggal
- * masuk/update tidak diimpor, dibiarkan default database (waktu import).
+ * "Status", "Product"/"Produk", "Estimated Value"/"Estimasi Nilai",
+ * "Company"/"Perusahaan", "Job Title"/"Jabatan", "City"/"Kota",
+ * "Notes"/"Catatan" (urutan bebas, header lain diabaikan). Baris tanpa
+ * nama/kontak dilewati. Tanggal masuk/update tidak diimpor, dibiarkan
+ * default database (waktu import).
  */
 export function parseLeadsCsv(text: string): {
   rows: NewLeadInput[];
@@ -141,6 +151,19 @@ export function parseLeadsCsv(text: string): {
   const estimasiColumnIndex = headerColumns.findIndex(
     (h) => h.startsWith("estimated") || h.startsWith("estimasi"),
   );
+  const perusahaanColumnIndex = findColumnIndex(headerColumns, [
+    "company",
+    "perusahaan",
+  ]);
+  const jabatanColumnIndex = findColumnIndex(headerColumns, [
+    "job title",
+    "jabatan",
+  ]);
+  const kotaColumnIndex = findColumnIndex(headerColumns, ["city", "kota"]);
+  const catatanColumnIndex = findColumnIndex(headerColumns, [
+    "notes",
+    "catatan",
+  ]);
 
   const rows: NewLeadInput[] = [];
   let skipped = 0;
@@ -164,6 +187,18 @@ export function parseLeadsCsv(text: string): {
       sumberColumnIndex >= 0 ? columns[sumberColumnIndex]?.trim() || null : null;
     const produk =
       produkColumnIndex >= 0 ? columns[produkColumnIndex]?.trim() || null : null;
+    const perusahaan =
+      perusahaanColumnIndex >= 0
+        ? columns[perusahaanColumnIndex]?.trim() || null
+        : null;
+    const jabatan =
+      jabatanColumnIndex >= 0
+        ? columns[jabatanColumnIndex]?.trim() || null
+        : null;
+    const kota =
+      kotaColumnIndex >= 0 ? columns[kotaColumnIndex]?.trim() || null : null;
+    const catatan =
+      catatanColumnIndex >= 0 ? columns[catatanColumnIndex]?.trim() || "" : "";
 
     const estimasiRaw =
       estimasiColumnIndex >= 0 ? columns[estimasiColumnIndex]?.trim() : "";
@@ -178,6 +213,10 @@ export function parseLeadsCsv(text: string): {
       status,
       produk,
       estimasi_nilai: Number.isFinite(estimasiParsed) ? estimasiParsed : null,
+      kota,
+      perusahaan,
+      jabatan,
+      catatan,
     });
   }
 

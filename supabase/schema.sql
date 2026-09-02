@@ -10,12 +10,16 @@ create table if not exists leads (
     check (status in ('Baru', 'Dihubungi', 'Tertarik', 'Nego', 'Closing', 'Hilang')),
   tanggal_masuk timestamptz not null default now(),
   tanggal_update timestamptz not null default now(),
-  -- Legacy: sebelum ada lead_activities, catatan disimpan di sini sebagai
-  -- teks yang di-concat manual. Kolom ini tidak ditulis lagi sejak Fase 2,
-  -- dipertahankan hanya untuk menampilkan data lama.
+  -- Dulu legacy (catatan lama hasil concat manual sebelum ada lead_activities).
+  -- Sejak 0009 dipakai lagi sebagai field "Notes / requirements" yang bisa
+  -- diedit dari form Add/Edit Lead; data lama tetap jadi nilai awalnya.
   catatan text not null default '',
   produk text,
-  estimasi_nilai numeric
+  estimasi_nilai numeric,
+  -- Ditambah di 0009_lead_fields.sql — data calon pelanggan yang lebih lengkap.
+  kota text,
+  perusahaan text,
+  jabatan text
 );
 
 -- Aktifkan Row Level Security supaya akses dibatasi lewat policy di bawah,

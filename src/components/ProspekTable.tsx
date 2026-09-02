@@ -10,6 +10,11 @@ import { useCurrentProfile } from "@/lib/useCurrentProfile";
 import SumberSelect from "@/components/SumberSelect";
 import AssigneeSelect from "@/components/AssigneeSelect";
 import CurrencyInput from "@/components/CurrencyInput";
+import {
+  buildLeadUpdate,
+  leadToEditForm,
+  type LeadEditForm,
+} from "@/lib/leadEdit";
 import { downloadCsv, leadsToCsv, parseLeadsCsv } from "@/lib/csv";
 import { needsFollowUp } from "@/lib/reminders";
 import {
@@ -33,13 +38,19 @@ function toLocalDateInputValue(iso: string): string {
 
 const supabase = createClient();
 
-type EditForm = {
-  nama: string;
-  kontak: string;
-  sumber: string;
-  produk: string;
-  estimasi_nilai: string;
-  assigned_to: string;
+// Nilai awal form edit sebelum ada baris yang dipilih. Bentuknya sama dengan
+// LeadEditForm (dipakai bareng LeadDetail lewat src/lib/leadEdit.ts).
+const EMPTY_EDIT_FORM: LeadEditForm = {
+  nama: "",
+  kontak: "",
+  sumber: "",
+  produk: "",
+  estimasi_nilai: "",
+  kota: "",
+  perusahaan: "",
+  jabatan: "",
+  catatan: "",
+  assigned_to: "",
 };
 
 // Halaman "Prospects": tabel semua lead dengan pencarian, filter
@@ -52,14 +63,7 @@ export default function ProspekTable() {
   const [followUpOnly, setFollowUpOnly] = useState(false);
   const [filterDate, setFilterDate] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<EditForm>({
-    nama: "",
-    kontak: "",
-    sumber: "",
-    produk: "",
-    estimasi_nilai: "",
-    assigned_to: "",
-  });
+  const [editForm, setEditForm] = useState<LeadEditForm>(EMPTY_EDIT_FORM);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
@@ -147,15 +151,7 @@ export default function ProspekTable() {
 
   function startEdit(lead: Lead) {
     setEditingId(lead.id);
-    setEditForm({
-      nama: lead.nama,
-      kontak: lead.kontak,
-      sumber: lead.sumber ?? "",
-      produk: lead.produk ?? "",
-      estimasi_nilai:
-        lead.estimasi_nilai != null ? String(lead.estimasi_nilai) : "",
-      assigned_to: lead.assigned_to ?? "",
-    });
+    setEditForm(leadToEditForm(lead));
   }
 
   async function handleStatusChange(lead: Lead, status: LeadStatus) {
@@ -180,44 +176,21 @@ export default function ProspekTable() {
     loadLeads();
   }
 
-  // Simpan perubahan dari form edit baris ini. Sama seperti LeadDetail:
-  // field yang benar-benar berubah (`perubahan`) dicatat ke riwayat
-  // aktivitas sebagai ringkasan.
+  // Simpan perubahan dari form edit baris ini. Payload update + daftar field
+  // yang berubah dibangun di buildLeadUpdate (dipakai bareng LeadDetail).
+  // Ringkasan perubahannya dicatat ke riwayat aktivitas.
   async function handleSaveEdit(lead: Lead) {
     setSaving(true);
 
-    const sumberBaru = editForm.sumber || null;
-    const produkBaru = editForm.produk || null;
-    const estimasiBaru = editForm.estimasi_nilai
-      ? Number(editForm.estimasi_nilai)
-      : null;
-
-    // Non-admin (sales) tidak boleh ubah assignee — lihat migration 0007.
-    const assignedToBaru = currentProfile?.is_admin
-      ? editForm.assigned_to || null
-      : lead.assigned_to;
-
-    const perubahan: string[] = [];
-    if (editForm.nama !== lead.nama) perubahan.push("name");
-    if (editForm.kontak !== lead.kontak) perubahan.push("contact");
-    if (sumberBaru !== lead.sumber) perubahan.push("source");
-    if (produkBaru !== lead.produk) perubahan.push("product");
-    if (estimasiBaru !== lead.estimasi_nilai) perubahan.push("estimated value");
-    if (currentProfile?.is_admin && assignedToBaru !== lead.assigned_to) {
-      perubahan.push("assignee");
-    }
+    const { update, changedLabels } = buildLeadUpdate(
+      editForm,
+      lead,
+      !!currentProfile?.is_admin,
+    );
 
     const { error } = await supabase
       .from("leads")
-      .update({
-        nama: editForm.nama,
-        kontak: editForm.kontak,
-        sumber: sumberBaru,
-        produk: produkBaru,
-        estimasi_nilai: estimasiBaru,
-        assigned_to: assignedToBaru,
-        tanggal_update: new Date().toISOString(),
-      })
+      .update(update)
       .eq("id", lead.id);
 
     if (error) {
@@ -226,11 +199,11 @@ export default function ProspekTable() {
       return;
     }
 
-    if (perubahan.length > 0) {
+    if (changedLabels.length > 0) {
       const activityError = await logNote(
         supabase,
         lead.id,
-        `Lead data updated: ${perubahan.join(", ")}.`,
+        `Lead data updated: ${changedLabels.join(", ")}.`,
       );
       if (activityError) setError(activityError);
     }
@@ -246,7 +219,15 @@ export default function ProspekTable() {
   return (
     <main className="p-8 flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Prospects</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-semibold">Prospects</h1>
+          <Link
+            href="/leads/baru"
+            className="bg-black text-white rounded px-4 py-2 text-sm"
+          >
+            + Add Lead
+          </Link>
+        </div>
         <div className="flex flex-wrap gap-3">
           <input
             type="text"
@@ -316,6 +297,8 @@ export default function ProspekTable() {
               <th className="p-2">Name</th>
               <th className="p-2">Contact</th>
               <th className="p-2">Source</th>
+              <th className="p-2">Company</th>
+              <th className="p-2">City</th>
               <th className="p-2">Product</th>
               <th className="p-2">Estimated Value</th>
               <th className="p-2">Assignee</th>
@@ -327,7 +310,7 @@ export default function ProspekTable() {
           <tbody>
             {filteredLeads.length === 0 && (
               <tr>
-                <td colSpan={9} className="p-4 text-center text-gray-500">
+                <td colSpan={11} className="p-4 text-center text-gray-500">
                   No matching prospects.
                 </td>
               </tr>
@@ -366,6 +349,27 @@ export default function ProspekTable() {
                             setEditForm({ ...editForm, sumber })
                           }
                           options={sumberOptions}
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          value={editForm.perusahaan}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              perusahaan: e.target.value,
+                            })
+                          }
+                          className="border rounded px-2 py-1 w-full"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          value={editForm.kota}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, kota: e.target.value })
+                          }
+                          className="border rounded px-2 py-1 w-full"
                         />
                       </td>
                       <td className="p-2">
@@ -423,6 +427,8 @@ export default function ProspekTable() {
                       </td>
                       <td className="p-2">{lead.kontak}</td>
                       <td className="p-2">{lead.sumber || "-"}</td>
+                      <td className="p-2">{lead.perusahaan || "-"}</td>
+                      <td className="p-2">{lead.kota || "-"}</td>
                       <td className="p-2">{lead.produk || "-"}</td>
                       <td className="p-2">
                         {lead.estimasi_nilai != null
