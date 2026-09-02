@@ -514,6 +514,7 @@ export default function InboxView() {
                   >
                     {messageTime(m)}
                     {m.direction === "outbound" && ` · ${m.status}`}
+                    {m.sent_by_bot && " · 🤖 Bot"}
                   </p>
                   {m.direction === "outbound" &&
                     m.status === "failed" &&

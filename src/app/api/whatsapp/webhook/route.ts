@@ -8,6 +8,7 @@ import {
 } from "@/lib/whatsapp";
 import { storeInboundMedia } from "@/lib/whatsappMedia";
 import { logWhatsappActivity } from "@/lib/activity";
+import { maybeRunBot } from "@/lib/botRunner";
 
 // Unduh media (bisa lambat) dijalankan lewat after() setelah balas 200 ke
 // Meta — beri ruang durasi lebih dari default 10 detik.
@@ -198,6 +199,13 @@ export async function POST(request: NextRequest) {
         if (isNewMessage && conversationLeadId) {
           const leadId = conversationLeadId;
           after(() => logWhatsappActivity(admin, leadId, preview));
+        }
+
+        // Chatbot AI: coba balas otomatis (kalau diaktifkan admin). Jalan
+        // setelah respons via after() — panggilan Claude bisa 1-2 detik.
+        if (isNewMessage) {
+          const convId = conversationId;
+          after(() => maybeRunBot(admin, convId));
         }
       }
 

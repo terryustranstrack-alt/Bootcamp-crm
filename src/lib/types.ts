@@ -182,6 +182,18 @@ export type Message = {
   status: MessageStatus;
   error_message: string | null;
   sent_by: string | null; // user yang kirim, hanya diisi untuk pesan outbound
+  sent_by_bot: boolean; // true kalau pesan keluar ini dikirim oleh chatbot AI
   wa_timestamp: string | null; // waktu asli dari WhatsApp (dipakai untuk urutan)
   created_at: string;
+};
+
+// Konfigurasi chatbot AI (satu baris di tabel bot_config, dikelola admin).
+export type BotConfig = {
+  id: number;
+  enabled: boolean;
+  system_prompt: string;
+  faq: string;
+  max_replies_per_conversation: number;
+  updated_at: string;
+  updated_by: string | null;
 };

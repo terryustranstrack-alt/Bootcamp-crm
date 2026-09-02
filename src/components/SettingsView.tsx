@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { syncTemplates } from "@/app/inbox/actions";
 import { useTemplates } from "@/lib/useTemplates";
 import { useQuickReplies } from "@/lib/useQuickReplies";
+import type { BotConfig } from "@/lib/types";
 
 const supabase = createClient();
 
@@ -19,6 +20,44 @@ export default function SettingsView() {
   const [newTitle, setNewTitle] = useState("");
   const [newBody, setNewBody] = useState("");
   const [qrError, setQrError] = useState<string | null>(null);
+
+  const [bot, setBot] = useState<BotConfig | null>(null);
+  const [botSaving, setBotSaving] = useState(false);
+  const [botMessage, setBotMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadBot() {
+      const { data } = await supabase
+        .from("bot_config")
+        .select("*")
+        .eq("id", 1)
+        .single();
+      if (data) setBot(data as BotConfig);
+    }
+    loadBot();
+  }, []);
+
+  async function handleSaveBot() {
+    if (!bot) return;
+    setBotSaving(true);
+    setBotMessage(null);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from("bot_config")
+      .update({
+        enabled: bot.enabled,
+        system_prompt: bot.system_prompt,
+        faq: bot.faq,
+        max_replies_per_conversation: bot.max_replies_per_conversation,
+        updated_at: new Date().toISOString(),
+        updated_by: user?.id ?? null,
+      })
+      .eq("id", 1);
+    setBotSaving(false);
+    setBotMessage(error ? error.message : "Chatbot settings saved.");
+  }
 
   function handleSync() {
     setSyncMessage(null);
@@ -183,6 +222,91 @@ export default function SettingsView() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-medium">AI chatbot</h2>
+        <p className="text-xs text-gray-500">
+          When enabled, unclaimed incoming WhatsApp messages get an automatic
+          reply from Claude. It stops as soon as a person claims the
+          conversation, and hands off on anything it&apos;s unsure about. Test
+          the prompt against real messages before turning it on.
+        </p>
+
+        {!bot ? (
+          <p className="text-sm text-gray-500">Loading…</p>
+        ) : (
+          <div className="flex flex-col gap-3 border rounded p-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={bot.enabled}
+                onChange={(e) => setBot({ ...bot, enabled: e.target.checked })}
+              />
+              Enabled
+            </label>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500">
+                System prompt (who the bot is, how it should behave)
+              </span>
+              <textarea
+                value={bot.system_prompt}
+                onChange={(e) =>
+                  setBot({ ...bot, system_prompt: e.target.value })
+                }
+                rows={4}
+                placeholder="You are the assistant for TransTRACK, a fleet management company. Greet new leads warmly, answer basic questions, and offer to connect them with a sales rep."
+                className="border rounded px-3 py-2 text-sm"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500">
+                FAQ / reference info the bot may use to answer
+              </span>
+              <textarea
+                value={bot.faq}
+                onChange={(e) => setBot({ ...bot, faq: e.target.value })}
+                rows={6}
+                placeholder={
+                  "Q: What does TransTRACK do?\nA: GPS fleet tracking, fuel monitoring, driver management.\n\nQ: Office hours?\nA: Mon–Fri 9am–6pm WIB."
+                }
+                className="border rounded px-3 py-2 text-sm"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 max-w-xs">
+              <span className="text-xs text-gray-500">
+                Max bot replies per conversation
+              </span>
+              <input
+                type="number"
+                min={1}
+                value={bot.max_replies_per_conversation}
+                onChange={(e) =>
+                  setBot({
+                    ...bot,
+                    max_replies_per_conversation: Number(e.target.value) || 1,
+                  })
+                }
+                className="border rounded px-3 py-2 text-sm"
+              />
+            </label>
+
+            <button
+              type="button"
+              onClick={handleSaveBot}
+              disabled={botSaving}
+              className="bg-black text-white rounded px-3 py-1.5 text-sm self-start disabled:opacity-50"
+            >
+              {botSaving ? "Saving…" : "Save chatbot settings"}
+            </button>
+            {botMessage && (
+              <p className="text-sm text-gray-600">{botMessage}</p>
+            )}
+          </div>
+        )}
       </section>
     </main>
   );
