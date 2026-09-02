@@ -14,6 +14,8 @@ import {
   transferConversation,
 } from "@/app/inbox/actions";
 import LeadContextPanel from "@/components/LeadContextPanel";
+import TemplatePicker from "@/components/TemplatePicker";
+import QuickReplyPicker from "@/components/QuickReplyPicker";
 import { useProfiles, profileLabel } from "@/lib/useProfiles";
 import { useCurrentProfile } from "@/lib/useCurrentProfile";
 import { searchMessages, type MessageSearchHit } from "@/lib/searchInbox";
@@ -56,7 +58,7 @@ function MessageBody({ m }: { m: Message }) {
     <p className="whitespace-pre-wrap mt-1">{m.text_body}</p>
   ) : null;
 
-  if (m.type === "text") {
+  if (m.type === "text" || m.type === "template") {
     return <p className="whitespace-pre-wrap">{m.text_body}</p>;
   }
   if (m.type === "location") return <p className="italic opacity-80">📍 Location</p>;
@@ -125,6 +127,7 @@ export default function InboxView() {
   const [search, setSearch] = useState("");
   const [messageHits, setMessageHits] = useState<MessageSearchHit[] | null>(null);
   const [draftText, setDraftText] = useState("");
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -181,6 +184,8 @@ export default function InboxView() {
   // dibaca: reset unread_count DAN kirim tanda "dibaca" (centang biru) ke
   // WhatsApp untuk pesan masuk terakhir.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShowTemplatePicker(false);
     if (!selectedConversation || selectedConversation.unread_count === 0) return;
     markConversationRead(selectedConversation.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -489,15 +494,6 @@ export default function InboxView() {
               </div>
             </div>
 
-            {windowClosed && (
-              <p className="bg-amber-50 text-amber-700 text-xs px-4 py-2 border-b shrink-0">
-                It&apos;s been more than 24 hours since this contact&apos;s
-                last message — WhatsApp restricts free-text replies outside
-                this window (requires an official message template, not
-                supported in this version).
-              </p>
-            )}
-
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2 min-h-0">
               {messages.map((m) => (
                 <div
@@ -539,42 +535,80 @@ export default function InboxView() {
               <p className="text-red-600 text-sm px-4 shrink-0">{actionError}</p>
             )}
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSend();
-              }}
-              className="border-t p-4 flex gap-2 shrink-0"
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                onChange={handleFileSelected}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isPending || uploading}
-                title="Attach a file"
-                className="border rounded px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
-              >
-                {uploading ? "…" : "📎"}
-              </button>
-              <input
-                value={draftText}
-                onChange={(e) => setDraftText(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1 border rounded px-3 py-2 text-sm"
-              />
-              <button
-                type="submit"
-                disabled={isPending || !draftText.trim()}
-                className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
-              >
-                Send
-              </button>
-            </form>
+            {windowClosed ? (
+              // Di luar jendela 24 jam: teks bebas tidak bisa dikirim, cuma
+              // template resmi.
+              <div className="border-t p-4 shrink-0 flex flex-col gap-2">
+                <p className="bg-amber-50 text-amber-700 text-xs px-3 py-2 rounded">
+                  It&apos;s been more than 24 hours since this contact&apos;s
+                  last message — WhatsApp only allows an approved template now.
+                </p>
+                <TemplatePicker
+                  conversationId={selectedConversation.id}
+                  onSent={() => {}}
+                />
+              </div>
+            ) : (
+              <>
+                {showTemplatePicker && (
+                  <div className="border-t p-4 shrink-0 bg-gray-50">
+                    <TemplatePicker
+                      conversationId={selectedConversation.id}
+                      onSent={() => setShowTemplatePicker(false)}
+                    />
+                  </div>
+                )}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSend();
+                  }}
+                  className="border-t p-4 flex gap-2 shrink-0"
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={handleFileSelected}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isPending || uploading}
+                    title="Attach a file"
+                    className="border rounded px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {uploading ? "…" : "📎"}
+                  </button>
+                  <QuickReplyPicker
+                    onPick={(text) =>
+                      setDraftText((d) => (d ? `${d} ${text}` : text))
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowTemplatePicker((v) => !v)}
+                    title="Use a template"
+                    className="border rounded px-3 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Tmpl
+                  </button>
+                  <input
+                    value={draftText}
+                    onChange={(e) => setDraftText(e.target.value)}
+                    placeholder="Type a message..."
+                    className="flex-1 border rounded px-3 py-2 text-sm"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isPending || !draftText.trim()}
+                    className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
+                  >
+                    Send
+                  </button>
+                </form>
+              </>
+            )}
           </>
         )}
       </section>

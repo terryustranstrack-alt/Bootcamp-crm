@@ -7,8 +7,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logWhatsappActivity } from "@/lib/activity";
 import type { ConversationStatus } from "@/lib/types";
 import {
+  listMessageTemplates,
   markMessageRead,
   sendMediaMessage,
+  sendTemplateMessage,
   sendTextMessage,
   WhatsappApiError,
   type OutboundMediaType,
@@ -17,6 +19,20 @@ import {
 export type InboxActionState = { error?: string; success?: boolean } | undefined;
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
+
+// Pastikan pemanggil sudah login & admin (untuk aksi kelola template).
+async function currentUserIsAdmin(supabase: ServerClient): Promise<boolean> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("is_admin")
+    .eq("id", user.id)
+    .single();
+  return profile?.is_admin ?? false;
+}
 
 // Update ringkasan percakapan setelah sebuah pesan keluar terkirim.
 async function touchConversation(
@@ -337,6 +353,124 @@ export async function sendMediaAttachment(
     mediaTypeFromMime(file.type),
     file.name,
   );
+}
+
+// Ambil daftar template dari Meta & simpan ke tabel whatsapp_templates.
+// Hanya admin. Ditulis lewat service-role client (tabel tidak punya policy write).
+export async function syncTemplates(): Promise<InboxActionState> {
+  const supabase = await createClient();
+  if (!(await currentUserIsAdmin(supabase))) {
+    return { error: "Only admins can sync templates." };
+  }
+
+  let templates;
+  try {
+    templates = await listMessageTemplates();
+  } catch (e) {
+    return {
+      error:
+        e instanceof WhatsappApiError ? e.message : "Failed to fetch templates.",
+    };
+  }
+
+  const admin = createAdminClient();
+  const rows = templates.map((t) => ({
+    name: t.name,
+    language: t.language,
+    category: t.category,
+    status: t.status,
+    body_text: t.bodyText,
+    variable_count: t.variableCount,
+    header_format: t.headerFormat,
+    components: t.components,
+    synced_at: new Date().toISOString(),
+  }));
+
+  const { error } = await admin
+    .from("whatsapp_templates")
+    .upsert(rows, { onConflict: "name,language" });
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings");
+  revalidatePath("/inbox");
+  return { success: true };
+}
+
+// Kirim pesan template ke kontak sebuah percakapan (satu-satunya cara balas
+// di luar jendela 24 jam). `renderedText` = teks body dengan variabel sudah
+// diisi, disimpan sebagai preview di tabel messages.
+export async function sendTemplate(
+  conversationId: string,
+  templateName: string,
+  language: string,
+  bodyParams: string[],
+  renderedText: string,
+  headerImageUrl?: string,
+): Promise<InboxActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not logged in." };
+
+  const { data: conversation, error: conversationError } = await supabase
+    .from("conversations")
+    .select("id, external_contact_id, lead_id")
+    .eq("id", conversationId)
+    .single();
+  if (conversationError || !conversation) {
+    return { error: "Conversation not found or inaccessible." };
+  }
+
+  const { data: insertedMessage, error: insertError } = await supabase
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      direction: "outbound",
+      type: "template",
+      text_body: renderedText,
+      status: "pending",
+      sent_by: user.id,
+      wa_timestamp: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (insertError || !insertedMessage) {
+    return { error: insertError?.message ?? "Failed to save message." };
+  }
+
+  try {
+    const { waMessageId } = await sendTemplateMessage(
+      conversation.external_contact_id,
+      templateName,
+      language,
+      bodyParams,
+      headerImageUrl,
+    );
+    await supabase
+      .from("messages")
+      .update({ status: "sent", wa_message_id: waMessageId, error_message: null })
+      .eq("id", insertedMessage.id);
+  } catch (e) {
+    const message =
+      e instanceof WhatsappApiError ? e.message : "Failed to send template.";
+    await supabase
+      .from("messages")
+      .update({ status: "failed", error_message: message })
+      .eq("id", insertedMessage.id);
+    return { error: message };
+  }
+
+  await touchConversation(supabase, conversationId, renderedText);
+  if (conversation.lead_id) {
+    await logWhatsappActivity(
+      supabase,
+      conversation.lead_id,
+      `→ ${renderedText}`,
+    );
+  }
+  revalidatePath("/inbox");
+  return { success: true };
 }
 
 // Tandai percakapan sudah dibaca: reset unread_count di CRM + kirim tanda

@@ -122,6 +122,31 @@ export type Conversation = {
   created_at: string;
 };
 
+// Satu baris di tabel `whatsapp_templates` — template pesan resmi dari Meta.
+export type WhatsappTemplateRow = {
+  id: string;
+  name: string;
+  language: string;
+  category: string | null;
+  status: string | null;
+  body_text: string | null;
+  variable_count: number;
+  header_format: "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT" | null;
+  components: unknown;
+  synced_at: string;
+};
+
+// Satu baris di tabel `quick_replies` — potongan teks siap pakai.
+// owner_id null = milik bersama, terisi = pribadi.
+export type QuickReply = {
+  id: string;
+  title: string;
+  body: string;
+  owner_id: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
 export type MessageDirection = "inbound" | "outbound";
 
 export type MessageType =
@@ -132,7 +157,8 @@ export type MessageType =
   | "video"
   | "sticker"
   | "location"
-  | "unsupported";
+  | "unsupported"
+  | "template";
 
 export type MessageStatus = "pending" | "sent" | "delivered" | "read" | "failed";
 

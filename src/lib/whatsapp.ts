@@ -161,6 +161,156 @@ export async function sendMediaMessage(
   return { waMessageId };
 }
 
+// Format komponen HEADER template: TEXT, IMAGE, VIDEO, DOCUMENT, atau null.
+export type TemplateHeaderFormat =
+  | "TEXT"
+  | "IMAGE"
+  | "VIDEO"
+  | "DOCUMENT"
+  | null;
+
+// Satu template pesan resmi dari Meta (subset field yang dipakai app ini).
+export type WhatsappTemplate = {
+  name: string;
+  language: string;
+  category: string | null;
+  status: string | null;
+  bodyText: string | null;
+  variableCount: number;
+  headerFormat: TemplateHeaderFormat;
+  components: unknown;
+};
+
+type RawTemplateComponent = { type?: string; text?: string; format?: string };
+
+// Hitung jumlah variabel {{n}} tertinggi di teks BODY template.
+function countTemplateVariables(bodyText: string | null): number {
+  if (!bodyText) return 0;
+  const numbers = [...bodyText.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m) =>
+    Number(m[1]),
+  );
+  return numbers.length > 0 ? Math.max(...numbers) : 0;
+}
+
+/**
+ * Ambil daftar template pesan yang terdaftar di WhatsApp Business Account
+ * (WABA) dari Meta. Butuh env var WHATSAPP_WABA_ID.
+ */
+export async function listMessageTemplates(): Promise<WhatsappTemplate[]> {
+  const wabaId = process.env.WHATSAPP_WABA_ID;
+  const { accessToken } = requireWhatsappCreds();
+  if (!wabaId) {
+    throw new WhatsappApiError("WHATSAPP_WABA_ID belum diisi.");
+  }
+
+  const res = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${wabaId}/message_templates?limit=200&fields=name,language,category,status,components`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  const data = await res.json();
+  if (!res.ok) {
+    const message =
+      data?.error?.message ?? `Gagal ambil template (HTTP ${res.status}).`;
+    throw new WhatsappApiError(message);
+  }
+
+  return (data?.data ?? []).map(
+    (t: {
+      name: string;
+      language: string;
+      category?: string;
+      status?: string;
+      components?: RawTemplateComponent[];
+    }) => {
+      const bodyComponent = (t.components ?? []).find(
+        (c) => c.type?.toUpperCase() === "BODY",
+      );
+      const headerComponent = (t.components ?? []).find(
+        (c) => c.type?.toUpperCase() === "HEADER",
+      );
+      const bodyText = bodyComponent?.text ?? null;
+      const headerFormat = (headerComponent?.format?.toUpperCase() ??
+        null) as TemplateHeaderFormat;
+      return {
+        name: t.name,
+        language: t.language,
+        category: t.category ?? null,
+        status: t.status ?? null,
+        bodyText,
+        variableCount: countTemplateVariables(bodyText),
+        headerFormat,
+        components: t.components ?? null,
+      };
+    },
+  );
+}
+
+/**
+ * Kirim pesan template ke sebuah nomor. `bodyParams` mengisi placeholder
+ * {{1}}, {{2}}, ... di komponen BODY sesuai urutan. `headerImageUrl` wajib
+ * diisi (URL gambar publik) kalau template punya header gambar.
+ */
+export async function sendTemplateMessage(
+  to: string,
+  templateName: string,
+  language: string,
+  bodyParams: string[],
+  headerImageUrl?: string,
+): Promise<{ waMessageId: string }> {
+  const { phoneNumberId, accessToken } = requireWhatsappCreds();
+
+  const components: unknown[] = [];
+  if (headerImageUrl) {
+    components.push({
+      type: "header",
+      parameters: [{ type: "image", image: { link: headerImageUrl } }],
+    });
+  }
+  if (bodyParams.length > 0) {
+    components.push({
+      type: "body",
+      parameters: bodyParams.map((text) => ({ type: "text", text })),
+    });
+  }
+
+  const template: Record<string, unknown> = {
+    name: templateName,
+    language: { code: language },
+  };
+  if (components.length > 0) {
+    template.components = components;
+  }
+
+  const res = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "template",
+        template,
+      }),
+    },
+  );
+
+  const data = await res.json();
+  if (!res.ok) {
+    const message =
+      data?.error?.message ?? `Gagal kirim template (HTTP ${res.status}).`;
+    throw new WhatsappApiError(message);
+  }
+  const waMessageId = data?.messages?.[0]?.id;
+  if (!waMessageId) {
+    throw new WhatsappApiError("Respons WhatsApp API tidak berisi message id.");
+  }
+  return { waMessageId };
+}
+
 /**
  * Kirim tanda "sudah dibaca" (centang biru) ke WhatsApp untuk sebuah pesan
  * masuk. Best-effort — kalau gagal, tidak apa-apa (tidak dilempar ke UI).

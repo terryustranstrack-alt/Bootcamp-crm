@@ -11,16 +11,18 @@ const MENU = [
   { href: "/inbox", label: "Inbox" },
 ];
 
-// Menu "Sales" cuma muncul untuk admin — sales biasa tidak punya akses
-// untuk lihat/kelola akun sales lain.
-const ADMIN_MENU = { href: "/sales", label: "Sales" };
+// Menu khusus admin — sales biasa tidak punya akses ke halaman-halaman ini.
+const ADMIN_MENU = [
+  { href: "/sales", label: "Sales" },
+  { href: "/settings", label: "Settings" },
+];
 
 // Navigasi bar di header, disembunyikan otomatis kalau belum login (lihat
 // layout.tsx: NavMenu hanya dirender saat `user` ada).
 export default function NavMenu({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
   const { totalUnread } = useInboxUnread();
-  const items = isAdmin ? [...MENU, ADMIN_MENU] : MENU;
+  const items = isAdmin ? [...MENU, ...ADMIN_MENU] : MENU;
 
   return (
     <nav className="flex gap-1">

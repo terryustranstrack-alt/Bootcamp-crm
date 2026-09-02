@@ -231,8 +231,9 @@ create table if not exists messages (
   conversation_id uuid not null references conversations(id) on delete cascade,
   direction text not null check (direction in ('inbound', 'outbound')),
   wa_message_id text unique,
+  -- 0013: 'template' ditambah — pesan template WhatsApp resmi.
   type text not null default 'text'
-    check (type in ('text', 'image', 'document', 'audio', 'video', 'sticker', 'location', 'unsupported')),
+    check (type in ('text', 'image', 'document', 'audio', 'video', 'sticker', 'location', 'unsupported', 'template')),
   text_body text,
   media_id text,          -- id media di sisi Meta (dari webhook)
   media_mime_type text,
@@ -315,6 +316,66 @@ create trigger on_message_inserted_bump_unread
 insert into storage.buckets (id, name, public)
   values ('whatsapp-media', 'whatsapp-media', false)
   on conflict (id) do nothing;
+
+-- 0013: template pesan WhatsApp resmi (di-sync dari Meta oleh admin).
+create table if not exists whatsapp_templates (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  language text not null,
+  category text,
+  status text,
+  body_text text,
+  variable_count int not null default 0,
+  header_format text,
+  components jsonb,
+  synced_at timestamptz not null default now(),
+  unique (name, language)
+);
+alter table whatsapp_templates enable row level security;
+create policy "authenticated read whatsapp templates"
+  on whatsapp_templates for select to authenticated using (true);
+-- Penulisan hanya lewat service-role (aksi admin syncTemplates).
+
+-- 0014: quick replies — potongan teks siap pakai untuk balasan inbox.
+-- owner_id null = milik bersama (admin), terisi = pribadi milik sales.
+create table if not exists quick_replies (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  body text not null,
+  owner_id uuid references profiles(id) on delete cascade,
+  created_by uuid references profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+alter table quick_replies enable row level security;
+create policy "read shared or own quick replies"
+  on quick_replies for select to authenticated
+  using (
+    owner_id is null
+    or owner_id = auth.uid()
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+  );
+create policy "insert own or shared quick replies"
+  on quick_replies for insert to authenticated
+  with check (
+    owner_id = auth.uid()
+    or (owner_id is null and exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin))
+  );
+create policy "update own quick replies, admin any"
+  on quick_replies for update to authenticated
+  using (
+    owner_id = auth.uid()
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+  )
+  with check (
+    owner_id = auth.uid()
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+  );
+create policy "delete own quick replies, admin any"
+  on quick_replies for delete to authenticated
+  using (
+    owner_id = auth.uid()
+    or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+  );
 
 -- 0011: indeks trigram untuk pencarian teks pesan & kontak.
 create extension if not exists pg_trgm;
