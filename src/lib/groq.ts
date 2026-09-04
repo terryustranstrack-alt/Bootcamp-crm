@@ -1,9 +1,10 @@
 import "server-only";
 
-// Model chatbot. Llama 3.3 70B lewat Groq: gratis, cepat, dan cukup pintar
-// untuk menjawab FAQ + menyapa lead baru. Groq tidak memakai data percakapan
-// untuk melatih model mereka.
-const BOT_MODEL = "llama-3.3-70b-versatile";
+// Model chatbot. GPT-OSS 120B lewat Groq: masuk paket gratis (±1.000
+// balasan/hari), cepat, lancar Bahasa Indonesia, dan cukup pintar untuk
+// menjawab FAQ + menyapa lead baru. Groq tidak memakai data percakapan
+// untuk melatih model.
+const BOT_MODEL = "openai/gpt-oss-120b";
 
 // Sentinel yang boleh dikeluarkan model kalau butuh diserahkan ke manusia.
 const HANDOFF_MARKER = "[[HANDOFF]]";
@@ -68,6 +69,10 @@ export async function generateBotReply({
       model: BOT_MODEL,
       max_completion_tokens: 512,
       temperature: 0.3,
+      // Model ini bisa "berpikir" dulu; untuk balasan FAQ singkat, pikiran
+      // seperlunya saja supaya cepat & hemat. Isi pikiran ditaruh di field
+      // terpisah oleh Groq, jadi tidak ikut ke balasan pelanggan.
+      reasoning_effort: "low",
       messages,
     }),
   });
