@@ -331,16 +331,20 @@ export async function maybeEnrichLead(
     const messages = (recent ?? []) as MessageRow[];
     if (messages.length === 0) return;
 
-    // Cuma jalan tepat setelah pelanggan mengirim sesuatu (pesan terakhir
-    // masuk) — tidak perlu ekstrak ulang setelah kita yang membalas.
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage.direction !== "inbound") return;
+    // Harus ada pesan MASUK dari pelanggan untuk diekstrak. Sengaja TIDAK
+    // menuntut pesan terakhir = masuk: fungsi ini jalan paralel dengan
+    // maybeRunBot, jadi balasan bot bisa keluar lebih dulu — yang penting
+    // pelanggan pernah mengirim teks di percakapan ini.
+    const inboundText = messages
+      .filter((m) => m.direction === "inbound")
+      .map((m) => m.text_body?.trim() ?? "")
+      .join(" ")
+      .trim();
+    if (inboundText.length === 0) return;
 
-    // Lewati kalau pesan terakhir cuma balasan singkat ("ok", "iya", dll.) —
-    // hemat panggilan AI. Pesan yang mungkin berisi data biasanya lebih
-    // panjang atau memuat alamat email.
-    const lastText = lastMessage.text_body?.trim() ?? "";
-    if (lastText.length < 12 && !lastText.includes("@")) return;
+    // Lewati selama pelanggan baru kirim sapaan/balasan singkat ("ok", "iya",
+    // "halo") — belum ada data yang bisa ditarik, hemat panggilan AI.
+    if (inboundText.length < 15 && !inboundText.includes("@")) return;
 
     let lead: LeadRow | null = null;
     if (conv.lead_id) {
