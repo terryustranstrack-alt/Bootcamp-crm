@@ -194,6 +194,7 @@ export type BotConfig = {
   enabled: boolean;
   system_prompt: string;
   faq: string;
+  welcome_message: string; // pesan pembuka verbatim untuk kontak pertama kali
   max_replies_per_conversation: number;
   updated_at: string;
   updated_by: string | null;

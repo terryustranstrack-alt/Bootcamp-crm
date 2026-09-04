@@ -387,6 +387,8 @@ create table if not exists bot_config (
   enabled boolean not null default false,
   system_prompt text not null default '',
   faq text not null default '',
+  -- 0017: pesan pembuka verbatim untuk pesan pertama dari sebuah kontak.
+  welcome_message text not null default '',
   max_replies_per_conversation int not null default 5,
   updated_at timestamptz not null default now(),
   updated_by uuid references profiles(id) on delete set null

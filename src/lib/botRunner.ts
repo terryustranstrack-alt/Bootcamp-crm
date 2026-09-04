@@ -111,6 +111,17 @@ export async function maybeRunBot(
 
     if (!shouldBotReply(conv, botConfig, botReplyCount, lastInboundAt)) return;
 
+    // Kontak pertama kali (belum pernah ada pesan keluar sama sekali): kirim
+    // pesan pembuka apa adanya — biasanya untuk menyapa & menanyakan data
+    // calon pelanggan sekaligus. Tidak lewat AI, jadi selalu sama & lengkap.
+    const hasOutbound = messages.some((m) => m.direction === "outbound");
+    const welcome = botConfig.welcome_message.trim();
+    if (!hasOutbound && welcome) {
+      if (await humanTookOver(admin, conversationId)) return;
+      await deliverBotText(admin, conv, conversationId, welcome);
+      return;
+    }
+
     const { text, handoff } = await generateBotReply({
       systemPrompt: botConfig.system_prompt,
       faq: botConfig.faq,
@@ -119,53 +130,72 @@ export async function maybeRunBot(
     if (handoff || !text) return;
 
     // Cek lagi tepat sebelum kirim — manusia mungkin sudah klaim saat API jalan.
-    const { data: fresh } = await admin
-      .from("conversations")
-      .select("assigned_to, status")
-      .eq("id", conversationId)
-      .single();
-    if (fresh?.assigned_to || fresh?.status === "resolved") return;
-
-    const now = new Date().toISOString();
-    let waMessageId: string | null = null;
-    let status = "sent";
-    let errorMessage: string | null = null;
-    try {
-      const result = await sendTextMessage(conv.external_contact_id, text);
-      waMessageId = result.waMessageId;
-    } catch (e) {
-      status = "failed";
-      errorMessage =
-        e instanceof WhatsappApiError ? e.message : "Failed to send bot reply.";
-    }
-
-    await admin.from("messages").insert({
-      conversation_id: conversationId,
-      direction: "outbound",
-      type: "text",
-      text_body: text,
-      status,
-      error_message: errorMessage,
-      sent_by: null,
-      sent_by_bot: true,
-      wa_message_id: waMessageId,
-      wa_timestamp: now,
-    });
-
-    if (status === "sent") {
-      await admin
-        .from("conversations")
-        .update({
-          last_message_at: now,
-          last_message_preview: text.slice(0, 200),
-        })
-        .eq("id", conversationId);
-      if (conv.lead_id) {
-        await logWhatsappActivity(admin, conv.lead_id, `→ (bot) ${text}`);
-      }
-    }
+    if (await humanTookOver(admin, conversationId)) return;
+    await deliverBotText(admin, conv, conversationId, text);
   } catch {
     // Chatbot gagal tidak boleh mengganggu penerimaan pesan — telan errornya.
+  }
+}
+
+// Apakah percakapan sudah diambil alih manusia (diklaim atau di-resolve)
+// sejak pengecekan awal — dipanggil tepat sebelum bot mengirim.
+async function humanTookOver(
+  admin: AdminClient,
+  conversationId: string,
+): Promise<boolean> {
+  const { data: fresh } = await admin
+    .from("conversations")
+    .select("assigned_to, status")
+    .eq("id", conversationId)
+    .single();
+  return Boolean(fresh?.assigned_to) || fresh?.status === "resolved";
+}
+
+// Kirim satu pesan teks dari bot ke kontak, simpan barisnya (sent_by_bot),
+// lalu perbarui ringkasan percakapan & riwayat aktivitas lead kalau ada.
+async function deliverBotText(
+  admin: AdminClient,
+  conv: ConversationRow,
+  conversationId: string,
+  text: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  let waMessageId: string | null = null;
+  let status = "sent";
+  let errorMessage: string | null = null;
+  try {
+    const result = await sendTextMessage(conv.external_contact_id, text);
+    waMessageId = result.waMessageId;
+  } catch (e) {
+    status = "failed";
+    errorMessage =
+      e instanceof WhatsappApiError ? e.message : "Failed to send bot reply.";
+  }
+
+  await admin.from("messages").insert({
+    conversation_id: conversationId,
+    direction: "outbound",
+    type: "text",
+    text_body: text,
+    status,
+    error_message: errorMessage,
+    sent_by: null,
+    sent_by_bot: true,
+    wa_message_id: waMessageId,
+    wa_timestamp: now,
+  });
+
+  if (status === "sent") {
+    await admin
+      .from("conversations")
+      .update({
+        last_message_at: now,
+        last_message_preview: text.slice(0, 200),
+      })
+      .eq("id", conversationId);
+    if (conv.lead_id) {
+      await logWhatsappActivity(admin, conv.lead_id, `→ (bot) ${text}`);
+    }
   }
 }
 

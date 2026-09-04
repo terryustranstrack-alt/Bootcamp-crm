@@ -50,6 +50,7 @@ export default function SettingsView() {
         enabled: bot.enabled,
         system_prompt: bot.system_prompt,
         faq: bot.faq,
+        welcome_message: bot.welcome_message,
         max_replies_per_conversation: bot.max_replies_per_conversation,
         updated_at: new Date().toISOString(),
         updated_by: user?.id ?? null,
@@ -249,6 +250,27 @@ export default function SettingsView() {
                 onChange={(e) => setBot({ ...bot, enabled: e.target.checked })}
               />
               Enabled
+            </label>
+
+            <label className="flex flex-col gap-1">
+              <span className="text-xs text-gray-500">
+                Welcome message — sent word-for-word the first time a new
+                contact messages, before the AI takes over. Use it to greet
+                and ask for the details you want (name, email, job title,
+                company, city, needs). Leave blank to let the AI handle the
+                first reply too.
+              </span>
+              <textarea
+                value={bot.welcome_message}
+                onChange={(e) =>
+                  setBot({ ...bot, welcome_message: e.target.value })
+                }
+                rows={5}
+                placeholder={
+                  "Halo! 👋 Terima kasih sudah menghubungi TransTRACK. Saya Ratih. Supaya tim kami bisa membantu dengan tepat, boleh dibantu isi:\n1. Nama\n2. Email\n3. Jabatan\n4. Perusahaan\n5. Kota\n6. Kebutuhan Anda (mis. jumlah & jenis kendaraan)"
+                }
+                className="border rounded px-3 py-2 text-sm"
+              />
             </label>
 
             <label className="flex flex-col gap-1">
