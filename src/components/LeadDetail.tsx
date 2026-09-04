@@ -49,6 +49,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
     kota: "",
     perusahaan: "",
     jabatan: "",
+    email: "",
     catatan: "",
     assigned_to: "",
   });
@@ -368,6 +369,21 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
           </div>
 
           <div className="flex flex-col gap-1">
+            <label htmlFor="edit-email" className="text-sm font-medium">
+              Email
+            </label>
+            <input
+              id="edit-email"
+              type="email"
+              value={editForm.email}
+              onChange={(e) =>
+                setEditForm({ ...editForm, email: e.target.value })
+              }
+              className="border rounded px-3 py-2"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
             <label htmlFor="edit-kota" className="text-sm font-medium">
               City/region
             </label>
@@ -478,6 +494,9 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
 
           <dt className="text-gray-500">Job title</dt>
           <dd>{lead.jabatan || "-"}</dd>
+
+          <dt className="text-gray-500">Email</dt>
+          <dd>{lead.email || "-"}</dd>
 
           <dt className="text-gray-500">City/region</dt>
           <dd>{lead.kota || "-"}</dd>

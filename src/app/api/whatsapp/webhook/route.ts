@@ -8,7 +8,7 @@ import {
 } from "@/lib/whatsapp";
 import { storeInboundMedia } from "@/lib/whatsappMedia";
 import { logWhatsappActivity } from "@/lib/activity";
-import { maybeRunBot } from "@/lib/botRunner";
+import { maybeEnrichLead, maybeRunBot } from "@/lib/botRunner";
 
 // Unduh media (bisa lambat) dijalankan lewat after() setelah balas 200 ke
 // Meta — beri ruang durasi lebih dari default 10 detik.
@@ -201,11 +201,13 @@ export async function POST(request: NextRequest) {
           after(() => logWhatsappActivity(admin, leadId, preview));
         }
 
-        // Chatbot AI: coba balas otomatis (kalau diaktifkan admin). Jalan
-        // setelah respons via after() — panggilan AI bisa 1-2 detik.
+        // Chatbot AI: coba balas otomatis (kalau diaktifkan admin) DAN coba
+        // tarik data calon pelanggan dari isi chat ke tabel leads. Keduanya
+        // jalan setelah respons via after() — panggilan AI bisa 1-2 detik.
         if (isNewMessage) {
           const convId = conversationId;
           after(() => maybeRunBot(admin, convId));
+          after(() => maybeEnrichLead(admin, convId));
         }
       }
 

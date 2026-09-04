@@ -19,7 +19,10 @@ create table if not exists leads (
   -- Ditambah di 0009_lead_fields.sql — data calon pelanggan yang lebih lengkap.
   kota text,
   perusahaan text,
-  jabatan text
+  jabatan text,
+  -- Ditambah di 0016_lead_email.sql — alamat email lead (bisa diisi manual
+  -- atau otomatis oleh chatbot AI dari isi chat WhatsApp).
+  email text
 );
 
 -- Aktifkan Row Level Security supaya akses dibatasi lewat policy di bawah,

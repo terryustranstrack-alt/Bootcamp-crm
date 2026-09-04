@@ -20,6 +20,7 @@ const EMPTY_FORM = {
   kota: "",
   perusahaan: "",
   jabatan: "",
+  email: "",
   catatan: "",
   assigned_to: "",
 };
@@ -115,6 +116,7 @@ export default function LeadForm({
         kota: form.kota || null,
         perusahaan: form.perusahaan || null,
         jabatan: form.jabatan || null,
+        email: form.email.trim() || null,
         catatan: form.catatan,
         assigned_to: currentProfile?.is_admin
           ? form.assigned_to || null
@@ -176,6 +178,19 @@ export default function LeadForm({
             Locked to this WhatsApp chat.
           </span>
         )}
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <label htmlFor="email" className="text-sm font-medium">
+          Email (optional)
+        </label>
+        <input
+          id="email"
+          type="email"
+          value={form.email}
+          onChange={(e) => setForm({ ...form, email: e.target.value })}
+          className="border rounded px-3 py-2"
+        />
       </div>
 
       <div className="flex flex-col gap-1">

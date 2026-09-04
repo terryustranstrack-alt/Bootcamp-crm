@@ -326,6 +326,16 @@ export default function LeadContextPanel({
                 className="border rounded px-2 py-1 w-full"
               />
             </Field>
+            <Field label="Email">
+              <input
+                type="email"
+                value={editForm.email}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, email: e.target.value })
+                }
+                className="border rounded px-2 py-1 w-full"
+              />
+            </Field>
             <Field label="City/region">
               <input
                 value={editForm.kota}

@@ -49,6 +49,7 @@ const EMPTY_EDIT_FORM: LeadEditForm = {
   kota: "",
   perusahaan: "",
   jabatan: "",
+  email: "",
   catatan: "",
   assigned_to: "",
 };

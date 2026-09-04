@@ -229,8 +229,13 @@ export default function SettingsView() {
         <p className="text-xs text-gray-500">
           When enabled, unclaimed incoming WhatsApp messages get an automatic
           reply from an AI assistant. It stops as soon as a person claims the
-          conversation, and hands off on anything it&apos;s unsure about. Test
-          the prompt against real messages before turning it on.
+          conversation, and hands off on anything it&apos;s unsure about. It
+          also reads each chat and fills in the lead&apos;s details (name,
+          email, company, job title, city, needs) when the customer mentions
+          them, creating a new lead if the number isn&apos;t in the CRM yet.
+          Every auto-filled value is written to the lead&apos;s activity log so
+          your team can check and correct it. Test the prompt against real
+          messages before turning it on.
         </p>
 
         {!bot ? (

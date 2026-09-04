@@ -13,6 +13,7 @@ const KOLOM: { header: string; value: (lead: Lead) => string }[] = [
   { header: "Source", value: (lead) => lead.sumber ?? "" },
   { header: "Company", value: (lead) => lead.perusahaan ?? "" },
   { header: "Job Title", value: (lead) => lead.jabatan ?? "" },
+  { header: "Email", value: (lead) => lead.email ?? "" },
   { header: "City", value: (lead) => lead.kota ?? "" },
   { header: "Status", value: (lead) => leadStatusLabel(lead.status) },
   { header: "Product", value: (lead) => lead.produk ?? "" },
@@ -72,6 +73,7 @@ export type NewLeadInput = {
   kota: string | null;
   perusahaan: string | null;
   jabatan: string | null;
+  email: string | null;
   catatan: string;
 };
 
@@ -125,7 +127,7 @@ function findColumnIndex(headerColumns: string[], candidates: string[]): number 
 /**
  * Mengenali kolom "Name"/"Nama", "Contact"/"Kontak", "Source"/"Sumber",
  * "Status", "Product"/"Produk", "Estimated Value"/"Estimasi Nilai",
- * "Company"/"Perusahaan", "Job Title"/"Jabatan", "City"/"Kota",
+ * "Company"/"Perusahaan", "Job Title"/"Jabatan", "Email", "City"/"Kota",
  * "Notes"/"Catatan" (urutan bebas, header lain diabaikan). Baris tanpa
  * nama/kontak dilewati. Tanggal masuk/update tidak diimpor, dibiarkan
  * default database (waktu import).
@@ -159,6 +161,7 @@ export function parseLeadsCsv(text: string): {
     "job title",
     "jabatan",
   ]);
+  const emailColumnIndex = findColumnIndex(headerColumns, ["email"]);
   const kotaColumnIndex = findColumnIndex(headerColumns, ["city", "kota"]);
   const catatanColumnIndex = findColumnIndex(headerColumns, [
     "notes",
@@ -195,6 +198,8 @@ export function parseLeadsCsv(text: string): {
       jabatanColumnIndex >= 0
         ? columns[jabatanColumnIndex]?.trim() || null
         : null;
+    const email =
+      emailColumnIndex >= 0 ? columns[emailColumnIndex]?.trim() || null : null;
     const kota =
       kotaColumnIndex >= 0 ? columns[kotaColumnIndex]?.trim() || null : null;
     const catatan =
@@ -216,6 +221,7 @@ export function parseLeadsCsv(text: string): {
       kota,
       perusahaan,
       jabatan,
+      email,
       catatan,
     });
   }

@@ -65,6 +65,7 @@ export type Lead = {
   kota: string | null; // kota/wilayah calon pelanggan
   perusahaan: string | null; // nama perusahaan/organisasi (untuk lead B2B)
   jabatan: string | null; // jabatan/peran orang ini di perusahaannya
+  email: string | null; // alamat email lead (opsional)
   assigned_to: string | null; // id sales yang menangani (profiles.id)
   created_by: string | null;
 };

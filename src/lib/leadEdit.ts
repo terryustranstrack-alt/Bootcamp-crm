@@ -12,6 +12,7 @@ export type LeadEditForm = {
   kota: string;
   perusahaan: string;
   jabatan: string;
+  email: string;
   catatan: string;
   assigned_to: string;
 };
@@ -28,6 +29,7 @@ export function leadToEditForm(lead: Lead): LeadEditForm {
     kota: lead.kota ?? "",
     perusahaan: lead.perusahaan ?? "",
     jabatan: lead.jabatan ?? "",
+    email: lead.email ?? "",
     catatan: lead.catatan ?? "",
     assigned_to: lead.assigned_to ?? "",
   };
@@ -51,6 +53,7 @@ export function buildLeadUpdate(
   const kotaBaru = form.kota || null;
   const perusahaanBaru = form.perusahaan || null;
   const jabatanBaru = form.jabatan || null;
+  const emailBaru = form.email.trim() || null;
   const assignedToBaru = isAdmin ? form.assigned_to || null : lead.assigned_to;
 
   const changedLabels: string[] = [];
@@ -64,6 +67,7 @@ export function buildLeadUpdate(
   if (kotaBaru !== lead.kota) changedLabels.push("city");
   if (perusahaanBaru !== lead.perusahaan) changedLabels.push("company");
   if (jabatanBaru !== lead.jabatan) changedLabels.push("job title");
+  if (emailBaru !== lead.email) changedLabels.push("email");
   if ((form.catatan || "") !== (lead.catatan || "")) {
     changedLabels.push("notes");
   }
@@ -81,6 +85,7 @@ export function buildLeadUpdate(
       kota: kotaBaru,
       perusahaan: perusahaanBaru,
       jabatan: jabatanBaru,
+      email: emailBaru,
       catatan: form.catatan,
       assigned_to: assignedToBaru,
       tanggal_update: new Date().toISOString(),
