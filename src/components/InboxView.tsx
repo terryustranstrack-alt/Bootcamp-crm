@@ -25,10 +25,17 @@ import type { Conversation, Lead, Message } from "@/lib/types";
 const FILTERS = [
   { key: "all", label: "All" },
   { key: "unread", label: "Unread" },
+  { key: "followup", label: "Needs follow-up" },
   { key: "unclaimed", label: "Unclaimed" },
   { key: "mine", label: "Mine" },
   { key: "resolved", label: "Resolved" },
 ] as const;
+
+// Percakapan yang bot-nya sudah mengumpulkan lead matang lalu berhenti,
+// dan belum diambil sales — inilah yang perlu ditindaklanjuti manusia.
+function needsFollowUp(c: { bot_replies_paused: boolean; assigned_to: string | null }) {
+  return c.bot_replies_paused && !c.assigned_to;
+}
 
 type FilterKey = (typeof FILTERS)[number]["key"];
 
@@ -154,6 +161,7 @@ export default function InboxView() {
       if (filter === "resolved" && c.status !== "resolved") return false;
       if (filter !== "resolved" && c.status === "resolved") return false;
       if (filter === "unread" && c.unread_count === 0) return false;
+      if (filter === "followup" && !needsFollowUp(c)) return false;
       if (filter === "unclaimed" && c.assigned_to) return false;
       if (filter === "mine" && !mine) return false;
       if (keyword) {
@@ -401,6 +409,11 @@ export default function InboxView() {
                 <div className="flex gap-2 mt-1">
                   {!conversation.assigned_to && (
                     <span className="text-xs text-amber-600">Unclaimed</span>
+                  )}
+                  {needsFollowUp(conversation) && (
+                    <span className="text-xs text-purple-600">
+                      🤖 → follow up
+                    </span>
                   )}
                   {conversation.status === "resolved" && (
                     <span className="text-xs text-green-600">Resolved</span>

@@ -22,7 +22,9 @@ create table if not exists leads (
   jabatan text,
   -- Ditambah di 0016_lead_email.sql — alamat email lead (bisa diisi manual
   -- atau otomatis oleh chatbot AI dari isi chat WhatsApp).
-  email text
+  email text,
+  -- 0018: true kalau lead ini dibuat otomatis oleh chatbot (untuk metrik).
+  created_by_bot boolean not null default false
 );
 
 -- Aktifkan Row Level Security supaya akses dibatasi lewat policy di bawah,
@@ -200,6 +202,10 @@ create table if not exists conversations (
   status text not null default 'open' check (status in ('open', 'pending', 'resolved')),
   resolved_at timestamptz,
   resolved_by uuid references profiles(id) on delete set null,
+  -- 0018: bot berhenti balas otomatis saat lead sudah "matang" & diserahkan;
+  -- enrich_attempts = batas atas percobaan tarik data lead dari chat ini.
+  bot_replies_paused boolean not null default false,
+  enrich_attempts int not null default 0,
   created_at timestamptz not null default now(),
   unique (channel, external_contact_id)
 );

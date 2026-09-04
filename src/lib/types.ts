@@ -66,6 +66,7 @@ export type Lead = {
   perusahaan: string | null; // nama perusahaan/organisasi (untuk lead B2B)
   jabatan: string | null; // jabatan/peran orang ini di perusahaannya
   email: string | null; // alamat email lead (opsional)
+  created_by_bot: boolean; // true kalau lead dibuat otomatis oleh chatbot
   assigned_to: string | null; // id sales yang menangani (profiles.id)
   created_by: string | null;
 };
@@ -120,6 +121,8 @@ export type Conversation = {
   status: ConversationStatus;
   resolved_at: string | null;
   resolved_by: string | null;
+  bot_replies_paused: boolean; // bot berhenti balas otomatis (sudah diserahkan)
+  enrich_attempts: number; // berapa kali bot coba tarik data lead dari chat ini
   created_at: string;
 };
 

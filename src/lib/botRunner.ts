@@ -20,6 +20,7 @@ type ConversationRow = {
   assigned_to: string | null;
   status: string;
   lead_id: string | null;
+  bot_replies_paused: boolean;
 };
 
 type MessageRow = {
@@ -36,7 +37,8 @@ function messageTime(m: MessageRow): number {
 }
 
 // Boleh balas otomatis kalau: bot menyala, belum dipegang manusia, belum
-// resolved, jatah balasan belum habis, dan masih di jendela 24 jam.
+// resolved, belum diserahkan ke sales, jatah balasan belum habis, dan masih
+// di jendela 24 jam.
 function shouldBotReply(
   conversation: ConversationRow,
   config: BotConfig,
@@ -46,6 +48,7 @@ function shouldBotReply(
   if (!config.enabled) return false;
   if (conversation.assigned_to) return false;
   if (conversation.status === "resolved") return false;
+  if (conversation.bot_replies_paused) return false;
   if (botReplyCount >= config.max_replies_per_conversation) return false;
   if (lastInboundAt == null || Date.now() - lastInboundAt > DAY_MS) return false;
   return true;
@@ -82,7 +85,9 @@ export async function maybeRunBot(
 
     const { data: conversation } = await admin
       .from("conversations")
-      .select("id, external_contact_id, assigned_to, status, lead_id")
+      .select(
+        "id, external_contact_id, assigned_to, status, lead_id, bot_replies_paused",
+      )
       .eq("id", conversationId)
       .single();
     if (!conversation) return;
@@ -117,7 +122,7 @@ export async function maybeRunBot(
     const hasOutbound = messages.some((m) => m.direction === "outbound");
     const welcome = botConfig.welcome_message.trim();
     if (!hasOutbound && welcome) {
-      if (await humanTookOver(admin, conversationId)) return;
+      if (await botMustStayQuiet(admin, conversationId)) return;
       await deliverBotText(admin, conv, conversationId, welcome);
       return;
     }
@@ -129,26 +134,32 @@ export async function maybeRunBot(
     });
     if (handoff || !text) return;
 
-    // Cek lagi tepat sebelum kirim — manusia mungkin sudah klaim saat API jalan.
-    if (await humanTookOver(admin, conversationId)) return;
+    // Cek lagi tepat sebelum kirim — situasinya mungkin berubah saat API jalan
+    // (manusia klaim, atau enrichment menyerahkan lead ke sales).
+    if (await botMustStayQuiet(admin, conversationId)) return;
     await deliverBotText(admin, conv, conversationId, text);
   } catch {
     // Chatbot gagal tidak boleh mengganggu penerimaan pesan — telan errornya.
   }
 }
 
-// Apakah percakapan sudah diambil alih manusia (diklaim atau di-resolve)
-// sejak pengecekan awal — dipanggil tepat sebelum bot mengirim.
-async function humanTookOver(
+// Apakah bot harus diam sekarang — diambil alih manusia (diklaim/di-resolve)
+// atau sudah diserahkan ke sales. Dipanggil tepat sebelum bot mengirim,
+// karena keadaan bisa berubah selama panggilan AI berjalan.
+async function botMustStayQuiet(
   admin: AdminClient,
   conversationId: string,
 ): Promise<boolean> {
   const { data: fresh } = await admin
     .from("conversations")
-    .select("assigned_to, status")
+    .select("assigned_to, status, bot_replies_paused")
     .eq("id", conversationId)
     .single();
-  return Boolean(fresh?.assigned_to) || fresh?.status === "resolved";
+  return (
+    Boolean(fresh?.assigned_to) ||
+    fresh?.status === "resolved" ||
+    Boolean(fresh?.bot_replies_paused)
+  );
 }
 
 // Kirim satu pesan teks dari bot ke kontak, simpan barisnya (sent_by_bot),
@@ -195,8 +206,36 @@ async function deliverBotText(
       .eq("id", conversationId);
     if (conv.lead_id) {
       await logWhatsappActivity(admin, conv.lead_id, `→ (bot) ${text}`);
+      await advanceLeadOnFirstContact(admin, conv.lead_id);
     }
   }
+}
+
+// Begitu bot mengirim pesan ke sebuah lead, lead itu sudah "dihubungi".
+// Naikkan statusnya dari "Baru" → "Dihubungi" (sekali saja) supaya pipeline
+// mencerminkan keadaan sebenarnya, dan catat perubahannya.
+async function advanceLeadOnFirstContact(
+  admin: AdminClient,
+  leadId: string,
+): Promise<void> {
+  const { data: lead } = await admin
+    .from("leads")
+    .select("status")
+    .eq("id", leadId)
+    .single();
+  if (lead?.status !== "Baru") return;
+
+  await admin
+    .from("leads")
+    .update({ status: "Dihubungi", tanggal_update: new Date().toISOString() })
+    .eq("id", leadId);
+  await admin.from("lead_activities").insert({
+    lead_id: leadId,
+    type: "status_change",
+    old_status: "Baru",
+    new_status: "Dihubungi",
+    created_by: null,
+  });
 }
 
 // ── Auto-capture data lead dari isi chat ──────────────────────────────────
@@ -310,7 +349,9 @@ export async function maybeEnrichLead(
 
     const { data: conversation } = await admin
       .from("conversations")
-      .select("id, external_contact_id, display_name, lead_id, assigned_to")
+      .select(
+        "id, external_contact_id, display_name, lead_id, assigned_to, bot_replies_paused, enrich_attempts",
+      )
       .eq("id", conversationId)
       .single();
     if (!conversation) return;
@@ -320,7 +361,14 @@ export async function maybeEnrichLead(
       display_name: string | null;
       lead_id: string | null;
       assigned_to: string | null;
+      bot_replies_paused: boolean;
+      enrich_attempts: number;
     };
+    // Sudah diserahkan ke sales → berhenti menarik data juga, biar manusia
+    // yang pegang.
+    if (conv.bot_replies_paused) return;
+    // Batas atas: jangan panggil AI tanpa henti untuk satu percakapan.
+    if (conv.enrich_attempts >= 8) return;
 
     const { data: recent } = await admin
       .from("messages")
@@ -368,6 +416,13 @@ export async function maybeEnrichLead(
       }
     }
 
+    // Hitung percobaan ini dulu (juga kalau nanti gagal) supaya batas atas
+    // benar-benar mengikat.
+    await admin
+      .from("conversations")
+      .update({ enrich_attempts: conv.enrich_attempts + 1 })
+      .eq("id", conversationId);
+
     const info = await extractLeadFields(toHistory(messages));
     const gotSomething =
       info.nama ||
@@ -381,16 +436,23 @@ export async function maybeEnrichLead(
     // ── Percakapan sudah punya lead: isi field kosong saja ──
     if (lead) {
       const { patch, filledLabels } = buildLeadPatch(lead, info);
-      if (filledLabels.length === 0) return;
-      await admin
-        .from("leads")
-        .update({ ...patch, tanggal_update: new Date().toISOString() })
-        .eq("id", lead.id);
-      await logBotNote(
-        admin,
-        lead.id,
-        `Bot filled from chat: ${filledLabels.join(", ")}.`,
-      );
+      if (filledLabels.length > 0) {
+        await admin
+          .from("leads")
+          .update({ ...patch, tanggal_update: new Date().toISOString() })
+          .eq("id", lead.id);
+        await logBotNote(
+          admin,
+          lead.id,
+          `Bot filled from chat: ${filledLabels.join(", ")}.`,
+        );
+      }
+      // Cek apakah lead sudah "matang" (nama + kebutuhan + perusahaan/email)
+      // — kalau ya, serahkan ke sales.
+      const merged = { ...lead, ...patch } as LeadRow;
+      if (leadIsQualified(merged)) {
+        await handOffToSales(admin, conv, conversationId, lead.id);
+      }
       return;
     }
 
@@ -416,19 +478,21 @@ export async function maybeEnrichLead(
       info.nama && info.nama !== conv.external_contact_id
         ? info.nama
         : conv.display_name?.trim() || conv.external_contact_id;
+    const newLead = {
+      nama,
+      kontak: conv.external_contact_id,
+      sumber: "WhatsApp",
+      assigned_to: conv.assigned_to,
+      perusahaan: info.perusahaan || null,
+      jabatan: info.jabatan || null,
+      kota: info.kota || null,
+      email: info.email && looksLikeEmail(info.email) ? info.email : null,
+      catatan: info.kebutuhan || "",
+      created_by_bot: true,
+    };
     const { data: created } = await admin
       .from("leads")
-      .insert({
-        nama,
-        kontak: conv.external_contact_id,
-        sumber: "WhatsApp",
-        assigned_to: conv.assigned_to,
-        perusahaan: info.perusahaan || null,
-        jabatan: info.jabatan || null,
-        kota: info.kota || null,
-        email: info.email && looksLikeEmail(info.email) ? info.email : null,
-        catatan: info.kebutuhan || "",
-      })
+      .insert(newLead)
       .select("id")
       .single();
     if (!created) return;
@@ -442,7 +506,70 @@ export async function maybeEnrichLead(
       created.id,
       "Lead auto-created by bot from a WhatsApp chat.",
     );
+
+    if (
+      leadIsQualified({
+        nama: newLead.nama,
+        kontak: newLead.kontak,
+        perusahaan: newLead.perusahaan,
+        email: newLead.email,
+        catatan: newLead.catatan,
+      })
+    ) {
+      await handOffToSales(admin, conv, conversationId, created.id);
+    }
   } catch {
     // Best effort — jangan sampai mengganggu penerimaan pesan.
   }
+}
+
+// Sebuah lead dianggap "matang" untuk sales kalau minimal punya: nama asli
+// (bukan sekadar nomor telepon), kebutuhan yang disebutkan, dan salah satu
+// dari nama perusahaan atau email.
+function leadIsQualified(l: {
+  nama: string;
+  kontak: string;
+  perusahaan: string | null;
+  email: string | null;
+  catatan: string | null;
+}): boolean {
+  const hasName = Boolean(l.nama) && l.nama !== l.kontak;
+  const hasNeed = !isBlank(l.catatan);
+  const hasContext = !isBlank(l.perusahaan) || !isBlank(l.email);
+  return hasName && hasNeed && hasContext;
+}
+
+// Pesan penutup dari bot sebelum menyerahkan ke tim sales.
+const HANDOFF_MESSAGE =
+  "Terima kasih! Data Anda sudah kami terima. Tim sales TransTRACK akan " +
+  "segera menghubungi Anda pada jam kerja (Senin–Jumat, 09.00–17.00 WIB).";
+
+// Bot sudah mengumpulkan lead yang matang: hentikan balasan otomatis, kirim
+// pesan penutup, dan tandai percakapan supaya muncul di tab "Needs follow-up"
+// buat tim sales.
+async function handOffToSales(
+  admin: AdminClient,
+  conv: { external_contact_id: string; assigned_to: string | null },
+  conversationId: string,
+  leadId: string,
+): Promise<void> {
+  await admin
+    .from("conversations")
+    .update({ bot_replies_paused: true })
+    .eq("id", conversationId);
+
+  const convRow: ConversationRow = {
+    id: conversationId,
+    external_contact_id: conv.external_contact_id,
+    assigned_to: conv.assigned_to,
+    status: "open",
+    lead_id: leadId,
+    bot_replies_paused: true,
+  };
+  await deliverBotText(admin, convRow, conversationId, HANDOFF_MESSAGE);
+  await logBotNote(
+    admin,
+    leadId,
+    "Bot collected a qualified lead and handed off for sales follow-up.",
+  );
 }

@@ -13,6 +13,7 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 type MessageSlice = {
   conversation_id: string;
   direction: "inbound" | "outbound";
+  sent_by_bot: boolean;
   wa_timestamp: string | null;
   created_at: string;
 };
@@ -35,26 +36,37 @@ function formatDuration(ms: number | null): string {
 export default function ChatMetrics() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<MessageSlice[]>([]);
+  const [botLeadCount, setBotLeadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const profiles = useProfiles();
 
   useEffect(() => {
     async function load() {
       const since = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
-      const [conversationsResult, messagesResult] = await Promise.all([
-        supabase.from("conversations").select("*"),
-        supabase
-          .from("messages")
-          .select("conversation_id, direction, wa_timestamp, created_at")
-          .gte("wa_timestamp", since)
-          .order("wa_timestamp", { ascending: true }),
-      ]);
+      const [conversationsResult, messagesResult, botLeadsResult] =
+        await Promise.all([
+          supabase.from("conversations").select("*"),
+          supabase
+            .from("messages")
+            .select(
+              "conversation_id, direction, sent_by_bot, wa_timestamp, created_at",
+            )
+            .gte("wa_timestamp", since)
+            .order("wa_timestamp", { ascending: true }),
+          // Jumlah lead yang dibuat otomatis oleh bot (mengikuti RLS: sales
+          // biasa melihat miliknya sendiri, admin melihat semua).
+          supabase
+            .from("leads")
+            .select("id", { count: "exact", head: true })
+            .eq("created_by_bot", true),
+        ]);
       if (conversationsResult.data) {
         setConversations(conversationsResult.data as Conversation[]);
       }
       if (messagesResult.data) {
         setMessages(messagesResult.data as MessageSlice[]);
       }
+      setBotLeadCount(botLeadsResult.count ?? 0);
       setLoading(false);
     }
     load();
@@ -99,6 +111,11 @@ export default function ChatMetrics() {
         ? replyDeltas.reduce((a, b) => a + b, 0) / replyDeltas.length
         : null;
 
+    // Balasan yang dikirim otomatis oleh chatbot (30 hari terakhir).
+    const botReplies = messages.filter(
+      (m) => m.direction === "outbound" && m.sent_by_bot,
+    ).length;
+
     // Percakapan terbuka per sales (+ baris "Unclaimed").
     const perSales = profiles.map((p) => ({
       name: profileLabel(p),
@@ -113,6 +130,7 @@ export default function ChatMetrics() {
       openCount: openConversations.length,
       unanswered,
       avgReplyMs,
+      botReplies,
       perSales: perSales.filter((s) => s.count > 0),
     };
   }, [conversations, messages, profiles]);
@@ -145,6 +163,20 @@ export default function ChatMetrics() {
           <p className="text-2xl font-semibold">
             {formatDuration(stats.avgReplyMs)}
           </p>
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs text-gray-500 mb-2">Chatbot</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="border rounded p-4">
+            <p className="text-xs text-gray-500">Bot replies sent (30d)</p>
+            <p className="text-2xl font-semibold">{stats.botReplies}</p>
+          </div>
+          <div className="border rounded p-4">
+            <p className="text-xs text-gray-500">Leads captured by bot</p>
+            <p className="text-2xl font-semibold">{botLeadCount}</p>
+          </div>
         </div>
       </div>
 
