@@ -202,7 +202,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Chatbot AI: coba balas otomatis (kalau diaktifkan admin). Jalan
-        // setelah respons via after() — panggilan Claude bisa 1-2 detik.
+        // setelah respons via after() — panggilan AI bisa 1-2 detik.
         if (isNewMessage) {
           const convId = conversationId;
           after(() => maybeRunBot(admin, convId));

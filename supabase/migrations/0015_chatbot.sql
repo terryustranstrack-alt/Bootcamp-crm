@@ -1,5 +1,5 @@
 -- Jalankan file ini di Supabase Dashboard > SQL Editor.
--- Chatbot AI (Claude) untuk membalas pesan WhatsApp masuk secara otomatis:
+-- Chatbot AI (Groq) untuk membalas pesan WhatsApp masuk secara otomatis:
 -- menjawab pertanyaan umum & menyapa lead baru, lalu menyerahkan ke manusia
 -- kalau perlu. Konfigurasinya satu baris di tabel bot_config (dikelola admin
 -- lewat halaman Settings). Default: MATIKAN.

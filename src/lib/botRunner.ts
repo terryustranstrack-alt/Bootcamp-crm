@@ -1,7 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTextMessage, WhatsappApiError } from "@/lib/whatsapp";
-import { generateBotReply, type BotHistoryTurn } from "@/lib/anthropic";
+import { generateBotReply, type BotHistoryTurn } from "@/lib/groq";
 import { logWhatsappActivity } from "@/lib/activity";
 import type { BotConfig } from "@/lib/types";
 

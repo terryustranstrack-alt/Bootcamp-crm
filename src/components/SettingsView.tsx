@@ -228,7 +228,7 @@ export default function SettingsView() {
         <h2 className="font-medium">AI chatbot</h2>
         <p className="text-xs text-gray-500">
           When enabled, unclaimed incoming WhatsApp messages get an automatic
-          reply from Claude. It stops as soon as a person claims the
+          reply from an AI assistant. It stops as soon as a person claims the
           conversation, and hands off on anything it&apos;s unsure about. Test
           the prompt against real messages before turning it on.
         </p>

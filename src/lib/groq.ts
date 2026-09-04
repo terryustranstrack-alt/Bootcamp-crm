@@ -1,12 +1,14 @@
 import "server-only";
 
-// Model chatbot. Haiku dipilih karena murah & cepat, cukup untuk FAQ + sapaan.
-const BOT_MODEL = "claude-haiku-4-5";
+// Model chatbot. Llama 3.3 70B lewat Groq: gratis, cepat, dan cukup pintar
+// untuk menjawab FAQ + menyapa lead baru. Groq tidak memakai data percakapan
+// untuk melatih model mereka.
+const BOT_MODEL = "llama-3.3-70b-versatile";
 
 // Sentinel yang boleh dikeluarkan model kalau butuh diserahkan ke manusia.
 const HANDOFF_MARKER = "[[HANDOFF]]";
 
-export class AnthropicApiError extends Error {}
+export class GroqApiError extends Error {}
 
 export type BotHistoryTurn = {
   role: "user" | "assistant";
@@ -31,7 +33,7 @@ function buildSystemPrompt(systemPrompt: string, faq: string): string {
 }
 
 /**
- * Minta balasan dari Claude untuk sebuah percakapan WhatsApp. Kembalikan
+ * Minta balasan dari model untuk sebuah percakapan WhatsApp. Kembalikan
  * `{ text, handoff }` — kalau `handoff` true, jangan kirim apa-apa ke kontak,
  * biarkan ditangani manusia.
  */
@@ -44,38 +46,40 @@ export async function generateBotReply({
   faq: string;
   history: BotHistoryTurn[];
 }): Promise<{ text: string; handoff: boolean }> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    throw new AnthropicApiError("ANTHROPIC_API_KEY belum diisi.");
+    throw new GroqApiError("GROQ_API_KEY belum diisi.");
   }
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  // Groq memakai format yang sama dengan OpenAI: instruksi sistem jadi pesan
+  // pertama dengan role "system", lalu menyusul riwayat percakapan.
+  const messages = [
+    { role: "system" as const, content: buildSystemPrompt(systemPrompt, faq) },
+    ...history,
+  ];
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      authorization: `Bearer ${apiKey}`,
       "content-type": "application/json",
     },
     body: JSON.stringify({
       model: BOT_MODEL,
-      max_tokens: 512,
-      system: buildSystemPrompt(systemPrompt, faq),
-      messages: history,
+      max_completion_tokens: 512,
+      temperature: 0.3,
+      messages,
     }),
   });
 
   const data = await res.json();
   if (!res.ok) {
     const message =
-      data?.error?.message ?? `Anthropic API error (HTTP ${res.status}).`;
-    throw new AnthropicApiError(message);
+      data?.error?.message ?? `Groq API error (HTTP ${res.status}).`;
+    throw new GroqApiError(message);
   }
 
-  const text: string = (data?.content ?? [])
-    .filter((block: { type?: string }) => block.type === "text")
-    .map((block: { text?: string }) => block.text ?? "")
-    .join("")
-    .trim();
+  const text: string = (data?.choices?.[0]?.message?.content ?? "").trim();
 
   if (!text || text.includes(HANDOFF_MARKER)) {
     return { text: "", handoff: true };
