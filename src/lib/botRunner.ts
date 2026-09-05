@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone } from "@/lib/phone";
 import { sendTextMessage, WhatsappApiError } from "@/lib/whatsapp";
+import { getBrandPhoneNumberId } from "@/lib/brands";
 import {
   extractLeadFields,
   generateBotReply,
@@ -21,6 +22,7 @@ type ConversationRow = {
   status: string;
   lead_id: string | null;
   bot_replies_paused: boolean;
+  brand_id: string | null;
 };
 
 type MessageRow = {
@@ -74,24 +76,24 @@ export async function maybeRunBot(
   conversationId: string,
 ): Promise<void> {
   try {
-    const { data: config } = await admin
-      .from("bot_config")
-      .select("*")
-      .eq("id", 1)
-      .single();
-    if (!config) return;
-    const botConfig = config as BotConfig;
-    if (!botConfig.enabled) return;
-
     const { data: conversation } = await admin
       .from("conversations")
       .select(
-        "id, external_contact_id, assigned_to, status, lead_id, bot_replies_paused",
+        "id, external_contact_id, assigned_to, status, lead_id, bot_replies_paused, brand_id",
       )
       .eq("id", conversationId)
       .single();
     if (!conversation) return;
     const conv = conversation as ConversationRow;
+
+    const { data: config } = await admin
+      .from("bot_config")
+      .select("*")
+      .eq("brand_id", conv.brand_id)
+      .single();
+    if (!config) return;
+    const botConfig = config as BotConfig;
+    if (!botConfig.enabled) return;
 
     const { data: recent } = await admin
       .from("messages")
@@ -175,7 +177,8 @@ async function deliverBotText(
   let status = "sent";
   let errorMessage: string | null = null;
   try {
-    const result = await sendTextMessage(conv.external_contact_id, text);
+    const phoneNumberId = await getBrandPhoneNumberId(admin, conv.brand_id);
+    const result = await sendTextMessage(conv.external_contact_id, text, phoneNumberId);
     waMessageId = result.waMessageId;
   } catch (e) {
     status = "failed";
@@ -339,18 +342,10 @@ export async function maybeEnrichLead(
   conversationId: string,
 ): Promise<void> {
   try {
-    const { data: config } = await admin
-      .from("bot_config")
-      .select("enabled")
-      .eq("id", 1)
-      .single();
-    // Ikut saklar chatbot yang sama — kalau bot mati, tidak auto-isi lead.
-    if (!config?.enabled) return;
-
     const { data: conversation } = await admin
       .from("conversations")
       .select(
-        "id, external_contact_id, display_name, lead_id, assigned_to, bot_replies_paused, enrich_attempts",
+        "id, external_contact_id, display_name, lead_id, assigned_to, bot_replies_paused, enrich_attempts, brand_id",
       )
       .eq("id", conversationId)
       .single();
@@ -363,12 +358,21 @@ export async function maybeEnrichLead(
       assigned_to: string | null;
       bot_replies_paused: boolean;
       enrich_attempts: number;
+      brand_id: string | null;
     };
     // Sudah diserahkan ke sales → berhenti menarik data juga, biar manusia
     // yang pegang.
     if (conv.bot_replies_paused) return;
     // Batas atas: jangan panggil AI tanpa henti untuk satu percakapan.
     if (conv.enrich_attempts >= 8) return;
+
+    const { data: config } = await admin
+      .from("bot_config")
+      .select("enabled")
+      .eq("brand_id", conv.brand_id)
+      .single();
+    // Ikut saklar chatbot yang sama — kalau bot mati, tidak auto-isi lead.
+    if (!config?.enabled) return;
 
     const { data: recent } = await admin
       .from("messages")
@@ -457,10 +461,15 @@ export async function maybeEnrichLead(
     }
 
     // ── Percakapan belum punya lead ──
-    // Aman dulu: cocokkan nomor ke lead yang sudah ada (format kontak bebas,
-    // jadi disamakan dulu sebelum dibandingkan — sama seperti di webhook).
+    // Aman dulu: cocokkan nomor ke lead brand yang sama yang sudah ada
+    // (format kontak bebas, jadi disamakan dulu sebelum dibandingkan — sama
+    // seperti di webhook). Dibatasi ke brand ini supaya lead tim sales
+    // brand lain tidak ikut ke-link.
     const normalized = normalizePhone(conv.external_contact_id);
-    const { data: allLeads } = await admin.from("leads").select("id, kontak");
+    const { data: allLeads } = await admin
+      .from("leads")
+      .select("id, kontak")
+      .eq("brand_id", conv.brand_id);
     const matched = (allLeads ?? []).find(
       (l) => normalizePhone(l.kontak) === normalized,
     );
@@ -483,6 +492,7 @@ export async function maybeEnrichLead(
       kontak: conv.external_contact_id,
       sumber: "WhatsApp",
       assigned_to: conv.assigned_to,
+      brand_id: conv.brand_id,
       perusahaan: info.perusahaan || null,
       jabatan: info.jabatan || null,
       kota: info.kota || null,
@@ -549,7 +559,11 @@ const HANDOFF_MESSAGE =
 // buat tim sales.
 async function handOffToSales(
   admin: AdminClient,
-  conv: { external_contact_id: string; assigned_to: string | null },
+  conv: {
+    external_contact_id: string;
+    assigned_to: string | null;
+    brand_id: string | null;
+  },
   conversationId: string,
   leadId: string,
 ): Promise<void> {
@@ -565,6 +579,7 @@ async function handOffToSales(
     status: "open",
     lead_id: leadId,
     bot_replies_paused: true,
+    brand_id: conv.brand_id,
   };
   await deliverBotText(admin, convRow, conversationId, HANDOFF_MESSAGE);
   await logBotNote(

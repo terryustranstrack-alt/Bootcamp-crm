@@ -9,13 +9,14 @@ export class WhatsappApiError extends Error {}
 /**
  * Kirim pesan teks lewat WhatsApp Cloud API resmi. `to` harus dalam format
  * digit-saja + kode negara (sama seperti wa_id dari webhook), lihat
- * src/lib/phone.ts.
+ * src/lib/phone.ts. `phoneNumberId` = nomor pengirim (brand mana yang
+ * membalas) — beda brand, beda phone_number_id, token tetap sama (satu WABA).
  */
 export async function sendTextMessage(
   to: string,
   body: string,
+  phoneNumberId: string,
 ): Promise<{ waMessageId: string }> {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   if (!phoneNumberId || !accessToken) {
     throw new WhatsappApiError("WhatsApp Cloud API belum dikonfigurasi.");
@@ -51,10 +52,25 @@ export async function sendTextMessage(
   return { waMessageId };
 }
 
-function requireWhatsappCreds(): { phoneNumberId: string; accessToken: string } {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+// Access token: satu WABA, jadi satu token dipakai bareng oleh semua nomor
+// brand — dipakai oleh SEMUA fungsi di bawah, termasuk yang tidak terikat ke
+// satu nomor tertentu (media, daftar template).
+function requireAccessToken(): string {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  if (!phoneNumberId || !accessToken) {
+  if (!accessToken) {
+    throw new WhatsappApiError("WhatsApp Cloud API belum dikonfigurasi.");
+  }
+  return accessToken;
+}
+
+// Dipakai fungsi yang kirim ATAS NAMA nomor tertentu (pesan media/template,
+// tanda dibaca) — phoneNumberId beda per brand, wajib diisi oleh pemanggil.
+function requireWhatsappCreds(phoneNumberId: string): {
+  phoneNumberId: string;
+  accessToken: string;
+} {
+  const accessToken = requireAccessToken();
+  if (!phoneNumberId) {
     throw new WhatsappApiError("WhatsApp Cloud API belum dikonfigurasi.");
   }
   return { phoneNumberId, accessToken };
@@ -71,7 +87,7 @@ export type OutboundMediaType = "image" | "document" | "audio" | "video";
 export async function getMediaUrl(
   mediaId: string,
 ): Promise<{ url: string; mimeType: string; fileSize: number }> {
-  const { accessToken } = requireWhatsappCreds();
+  const accessToken = requireAccessToken();
   const res = await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${mediaId}`,
     { headers: { Authorization: `Bearer ${accessToken}` } },
@@ -93,7 +109,7 @@ export async function getMediaUrl(
 export async function downloadMedia(
   url: string,
 ): Promise<{ bytes: ArrayBuffer; contentType: string }> {
-  const { accessToken } = requireWhatsappCreds();
+  const accessToken = requireAccessToken();
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -120,8 +136,9 @@ export async function sendMediaMessage(
     filename?: string;
     caption?: string;
   },
+  phoneNumberId: string,
 ): Promise<{ waMessageId: string }> {
-  const { phoneNumberId, accessToken } = requireWhatsappCreds();
+  const { accessToken } = requireWhatsappCreds(phoneNumberId);
 
   const mediaObject: Record<string, string> = { link: opts.link };
   if (opts.filename && opts.type === "document") {
@@ -198,7 +215,7 @@ function countTemplateVariables(bodyText: string | null): number {
  */
 export async function listMessageTemplates(): Promise<WhatsappTemplate[]> {
   const wabaId = process.env.WHATSAPP_WABA_ID;
-  const { accessToken } = requireWhatsappCreds();
+  const accessToken = requireAccessToken();
   if (!wabaId) {
     throw new WhatsappApiError("WHATSAPP_WABA_ID belum diisi.");
   }
@@ -255,9 +272,10 @@ export async function sendTemplateMessage(
   templateName: string,
   language: string,
   bodyParams: string[],
-  headerImageUrl?: string,
+  headerImageUrl: string | undefined,
+  phoneNumberId: string,
 ): Promise<{ waMessageId: string }> {
-  const { phoneNumberId, accessToken } = requireWhatsappCreds();
+  const { accessToken } = requireWhatsappCreds(phoneNumberId);
 
   const components: unknown[] = [];
   if (headerImageUrl) {
@@ -315,8 +333,11 @@ export async function sendTemplateMessage(
  * Kirim tanda "sudah dibaca" (centang biru) ke WhatsApp untuk sebuah pesan
  * masuk. Best-effort — kalau gagal, tidak apa-apa (tidak dilempar ke UI).
  */
-export async function markMessageRead(waMessageId: string): Promise<void> {
-  const { phoneNumberId, accessToken } = requireWhatsappCreds();
+export async function markMessageRead(
+  waMessageId: string,
+  phoneNumberId: string,
+): Promise<void> {
+  const { accessToken } = requireWhatsappCreds(phoneNumberId);
   await fetch(
     `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
     {
@@ -357,6 +378,9 @@ export type WhatsappWebhookPayload = {
   entry?: Array<{
     changes?: Array<{
       value?: {
+        // Nomor mana yang menerima pesan ini — dipakai untuk tahu brand
+        // mana yang bersangkutan (lihat tabel "brands").
+        metadata?: { display_phone_number?: string; phone_number_id?: string };
         contacts?: Array<{ profile?: { name?: string }; wa_id: string }>;
         messages?: Array<{
           from: string;

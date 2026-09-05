@@ -33,6 +33,30 @@ export async function GET(request: NextRequest) {
   return new NextResponse("Forbidden", { status: 403 });
 }
 
+// Cari brand mana yang menerima pesan ini lewat phone_number_id di metadata
+// webhook Meta. Kalau tidak cocok (mis. metadata kosong/nomor belum
+// terdaftar), jatuh ke brand default supaya pesan tidak pernah hilang begitu
+// saja — cuma masuk ke brand yang salah, yang gampang dipindah manual.
+async function resolveBrandId(
+  admin: ReturnType<typeof createAdminClient>,
+  phoneNumberId: string | undefined,
+): Promise<string | null> {
+  if (phoneNumberId) {
+    const { data: matched } = await admin
+      .from("brands")
+      .select("id")
+      .eq("phone_number_id", phoneNumberId)
+      .maybeSingle();
+    if (matched) return matched.id;
+  }
+  const { data: fallback } = await admin
+    .from("brands")
+    .select("id")
+    .eq("is_default", true)
+    .maybeSingle();
+  return fallback?.id ?? null;
+}
+
 // Teks singkat yang ditampilkan sebagai preview pesan terakhir di daftar
 // percakapan (sidebar inbox) — pesan teks dipotong, pesan media diberi label.
 function previewFor(messageType: string, textBody?: string): string {
@@ -72,6 +96,13 @@ export async function POST(request: NextRequest) {
       const changeValue = change.value;
       if (!changeValue) continue;
 
+      // Brand (nomor WhatsApp) mana yang menerima batch pesan ini — sama
+      // untuk semua pesan di dalam satu "change", jadi dicari sekali saja.
+      const brandId = await resolveBrandId(
+        admin,
+        changeValue.metadata?.phone_number_id,
+      );
+
       // --- Bagian 1: pesan baru yang masuk dari kontak ---
       for (const message of changeValue.messages ?? []) {
         const contactName = changeValue.contacts?.find(
@@ -90,12 +121,15 @@ export async function POST(request: NextRequest) {
           Number(message.timestamp) * 1000,
         ).toISOString();
 
-        // Cari apakah sudah ada percakapan dengan nomor pengirim ini.
+        // Cari apakah sudah ada percakapan dengan nomor pengirim ini PADA
+        // BRAND INI — kontak yang sama menghubungi 2 nomor brand berbeda
+        // dianggap 2 percakapan terpisah (lihat unique constraint di 0019).
         const { data: existingConversation } = await admin
           .from("conversations")
           .select("id, status, lead_id")
           .eq("channel", "whatsapp")
           .eq("external_contact_id", message.from)
+          .eq("brand_id", brandId)
           .maybeSingle();
 
         let conversationId: string;
@@ -120,12 +154,15 @@ export async function POST(request: NextRequest) {
             .eq("id", conversationId);
         } else {
           // Kontak baru — buat percakapan baru, dan coba auto-link ke lead
-          // yang sudah ada lewat pencocokan nomor telepon (leads.kontak
-          // formatnya bebas, jadi disamakan dulu formatnya sebelum dibandingkan).
+          // yang sudah ada PADA BRAND INI lewat pencocokan nomor telepon
+          // (leads.kontak formatnya bebas, jadi disamakan dulu formatnya
+          // sebelum dibandingkan). Dibatasi ke brand yang sama supaya lead
+          // milik tim sales brand lain tidak ikut ke-link.
           const normalizedSenderPhone = normalizePhone(message.from);
           const { data: allLeadsWithContact } = await admin
             .from("leads")
             .select("id, kontak, assigned_to")
+            .eq("brand_id", brandId)
             .not("kontak", "is", null);
           const matchedLead = (allLeadsWithContact ?? []).find(
             (lead) => normalizePhone(lead.kontak) === normalizedSenderPhone,
@@ -136,6 +173,7 @@ export async function POST(request: NextRequest) {
             .insert({
               channel: "whatsapp",
               external_contact_id: message.from,
+              brand_id: brandId,
               display_name: contactName ?? null,
               lead_id: matchedLead?.id ?? null,
               // Kalau ketemu lead, percakapan otomatis "diklaim" oleh sales

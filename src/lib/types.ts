@@ -67,6 +67,7 @@ export type Lead = {
   jabatan: string | null; // jabatan/peran orang ini di perusahaannya
   email: string | null; // alamat email lead (opsional)
   created_by_bot: boolean; // true kalau lead dibuat otomatis oleh chatbot
+  brand_id: string | null; // brand pemilik lead ini (pool "belum diklaim")
   assigned_to: string | null; // id sales yang menangani (profiles.id)
   created_by: string | null;
 };
@@ -94,6 +95,20 @@ export type Profile = {
   full_name: string | null;
   phone: string | null;
   is_admin: boolean;
+  // Brand/tim sales mana yang dia tangani — menentukan pool "belum
+  // diklaim" mana yang boleh dia lihat. Admin biasanya tidak terikat satu
+  // brand (bebas lihat semua lewat is_admin), tapi kolomnya tetap ada.
+  brand_id: string | null;
+  created_at: string;
+};
+
+// Satu baris di tabel `brands` — satu brand = satu nomor WhatsApp (semua
+// nomor berbagi WABA/app/token yang sama, cuma phone_number_id yang beda).
+export type Brand = {
+  id: string;
+  name: string;
+  phone_number_id: string;
+  is_default: boolean;
   created_at: string;
 };
 
@@ -123,6 +138,7 @@ export type Conversation = {
   resolved_by: string | null;
   bot_replies_paused: boolean; // bot berhenti balas otomatis (sudah diserahkan)
   enrich_attempts: number; // berapa kali bot coba tarik data lead dari chat ini
+  brand_id: string | null; // nomor WhatsApp (brand) yang menerima chat ini
   created_at: string;
 };
 
@@ -191,9 +207,11 @@ export type Message = {
   created_at: string;
 };
 
-// Konfigurasi chatbot AI (satu baris di tabel bot_config, dikelola admin).
+// Konfigurasi chatbot AI — satu baris per brand di tabel bot_config,
+// dikelola admin (lihat SettingsView, punya selector brand mana yang
+// sedang diedit).
 export type BotConfig = {
-  id: number;
+  brand_id: string;
   enabled: boolean;
   system_prompt: string;
   faq: string;

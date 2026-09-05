@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logWhatsappActivity } from "@/lib/activity";
+import { getBrandPhoneNumberId } from "@/lib/brands";
 import type { ConversationStatus } from "@/lib/types";
 import {
   listMessageTemplates,
@@ -58,9 +59,10 @@ async function deliverText(
   messageId: string,
   to: string,
   text: string,
+  phoneNumberId: string,
 ): Promise<{ error?: string }> {
   try {
-    const { waMessageId } = await sendTextMessage(to, text);
+    const { waMessageId } = await sendTextMessage(to, text, phoneNumberId);
     await supabase
       .from("messages")
       .update({ status: "sent", wa_message_id: waMessageId, error_message: null })
@@ -96,7 +98,7 @@ export async function sendMessage(
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id, external_contact_id, lead_id")
+    .select("id, external_contact_id, lead_id, brand_id")
     .eq("id", conversationId)
     .single();
 
@@ -122,11 +124,13 @@ export async function sendMessage(
     return { error: insertError?.message ?? "Failed to save message." };
   }
 
+  const phoneNumberId = await getBrandPhoneNumberId(supabase, conversation.brand_id);
   const result = await deliverText(
     supabase,
     insertedMessage.id,
     conversation.external_contact_id,
     trimmedText,
+    phoneNumberId,
   );
   if (result.error) return { error: result.error };
 
@@ -170,7 +174,7 @@ export async function retryMessage(
 
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id, external_contact_id, lead_id")
+    .select("id, external_contact_id, lead_id, brand_id")
     .eq("id", message.conversation_id)
     .single();
   if (!conversation) {
@@ -182,11 +186,13 @@ export async function retryMessage(
     .update({ status: "pending", error_message: null })
     .eq("id", messageId);
 
+  const phoneNumberId = await getBrandPhoneNumberId(supabase, conversation.brand_id);
   const result = await deliverText(
     supabase,
     messageId,
     conversation.external_contact_id,
     message.text_body ?? "",
+    phoneNumberId,
   );
   if (result.error) return { error: result.error };
 
@@ -219,7 +225,7 @@ export async function sendMedia(
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id, external_contact_id, lead_id")
+    .select("id, external_contact_id, lead_id, brand_id")
     .eq("id", conversationId)
     .single();
   if (conversationError || !conversation) {
@@ -265,6 +271,7 @@ export async function sendMedia(
   const preview = trimmedCaption ?? filename ?? `[${type}]`;
 
   try {
+    const phoneNumberId = await getBrandPhoneNumberId(supabase, conversation.brand_id);
     const { waMessageId } = await sendMediaMessage(
       conversation.external_contact_id,
       {
@@ -273,6 +280,7 @@ export async function sendMedia(
         filename,
         caption: trimmedCaption ?? undefined,
       },
+      phoneNumberId,
     );
     await supabase
       .from("messages")
@@ -415,7 +423,7 @@ export async function sendTemplate(
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id, external_contact_id, lead_id")
+    .select("id, external_contact_id, lead_id, brand_id")
     .eq("id", conversationId)
     .single();
   if (conversationError || !conversation) {
@@ -440,12 +448,14 @@ export async function sendTemplate(
   }
 
   try {
+    const phoneNumberId = await getBrandPhoneNumberId(supabase, conversation.brand_id);
     const { waMessageId } = await sendTemplateMessage(
       conversation.external_contact_id,
       templateName,
       language,
       bodyParams,
       headerImageUrl,
+      phoneNumberId,
     );
     await supabase
       .from("messages")
@@ -496,7 +506,16 @@ export async function markConversationRead(
 
   if (lastInbound?.wa_message_id) {
     try {
-      await markMessageRead(lastInbound.wa_message_id);
+      const { data: conversation } = await supabase
+        .from("conversations")
+        .select("brand_id")
+        .eq("id", conversationId)
+        .single();
+      const phoneNumberId = await getBrandPhoneNumberId(
+        supabase,
+        conversation?.brand_id ?? null,
+      );
+      await markMessageRead(lastInbound.wa_message_id, phoneNumberId);
     } catch {
       // Best-effort — kalau gagal, tanda "dibaca" cuma tidak terkirim.
     }
@@ -625,7 +644,7 @@ export async function createLeadFromConversation(
 
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("id, external_contact_id")
+    .select("id, external_contact_id, brand_id")
     .eq("id", conversationId)
     .single();
 
@@ -640,6 +659,7 @@ export async function createLeadFromConversation(
       kontak: conversation.external_contact_id,
       sumber: "WhatsApp",
       assigned_to: user.id,
+      brand_id: conversation.brand_id,
     })
     .select("id")
     .single();
