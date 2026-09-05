@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { syncTemplates } from "@/app/inbox/actions";
 import { useTemplates } from "@/lib/useTemplates";
 import { useQuickReplies } from "@/lib/useQuickReplies";
+import { useBrands } from "@/lib/useBrands";
 import type { BotConfig } from "@/lib/types";
 
 const supabase = createClient();
@@ -21,21 +22,33 @@ export default function SettingsView() {
   const [newBody, setNewBody] = useState("");
   const [qrError, setQrError] = useState<string | null>(null);
 
+  const brands = useBrands();
+  const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
   const [bot, setBot] = useState<BotConfig | null>(null);
   const [botSaving, setBotSaving] = useState(false);
   const [botMessage, setBotMessage] = useState<string | null>(null);
 
+  // Begitu daftar brand datang, mulai dari brand default (nomor yang sudah
+  // jalan). Admin bisa ganti lewat dropdown di bawah.
   useEffect(() => {
+    if (selectedBrandId || brands.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedBrandId((brands.find((b) => b.is_default) ?? brands[0]).id);
+  }, [brands, selectedBrandId]);
+
+  useEffect(() => {
+    if (!selectedBrandId) return;
     async function loadBot() {
+      setBot(null);
       const { data } = await supabase
         .from("bot_config")
         .select("*")
-        .eq("id", 1)
+        .eq("brand_id", selectedBrandId)
         .single();
       if (data) setBot(data as BotConfig);
     }
     loadBot();
-  }, []);
+  }, [selectedBrandId]);
 
   async function handleSaveBot() {
     if (!bot) return;
@@ -55,7 +68,7 @@ export default function SettingsView() {
         updated_at: new Date().toISOString(),
         updated_by: user?.id ?? null,
       })
-      .eq("id", 1);
+      .eq("brand_id", bot.brand_id);
     setBotSaving(false);
     setBotMessage(error ? error.message : "Chatbot settings saved.");
   }
@@ -238,6 +251,23 @@ export default function SettingsView() {
           your team can check and correct it. Test the prompt against real
           messages before turning it on.
         </p>
+
+        {brands.length > 1 && (
+          <label className="flex flex-col gap-1 max-w-xs">
+            <span className="text-xs text-gray-500">Brand (WhatsApp number)</span>
+            <select
+              value={selectedBrandId ?? ""}
+              onChange={(e) => setSelectedBrandId(e.target.value)}
+              className="border rounded px-3 py-2 text-sm"
+            >
+              {brands.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {!bot ? (
           <p className="text-sm text-gray-500">Loading…</p>

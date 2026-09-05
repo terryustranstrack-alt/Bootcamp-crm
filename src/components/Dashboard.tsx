@@ -13,7 +13,13 @@ function formatRupiah(n: number) {
 
 // Halaman ringkasan performa: total lead, conversion rate, lead masuk
 // minggu ini, nilai closing, dan grafik batang distribusi lead per status.
-export default function Dashboard() {
+// `brandFilter` ("all" atau id sebuah brand) datang dari DashboardView di
+// atasnya — dashboard bisa dipersempit ke satu brand (nomor WhatsApp) saja.
+export default function Dashboard({
+  brandFilter = "all",
+}: {
+  brandFilter?: string;
+}) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,11 +40,15 @@ export default function Dashboard() {
   }, []);
 
   const stats = useMemo(() => {
-    const totalLeads = leads.length;
+    const leadsInBrand =
+      brandFilter === "all"
+        ? leads
+        : leads.filter((lead) => lead.brand_id === brandFilter);
+    const totalLeads = leadsInBrand.length;
     // Jumlah lead + total estimasi nilainya, dikelompokkan per status —
     // dipakai untuk grafik batang "Distribusi Pipeline".
     const perStatus = LEAD_STATUSES.map((status) => {
-      const leadsInStatus = leads.filter((lead) => lead.status === status);
+      const leadsInStatus = leadsInBrand.filter((lead) => lead.status === status);
       const totalNilai = leadsInStatus.reduce(
         (sum, lead) => sum + (lead.estimasi_nilai ?? 0),
         0,
@@ -51,13 +61,13 @@ export default function Dashboard() {
         ?.count ?? 0;
     const conversionRate = totalLeads > 0 ? (closingCount / totalLeads) * 100 : 0;
 
-    const leadsMingguIni = leads.filter(
+    const leadsMingguIni = leadsInBrand.filter(
       (lead) => now - new Date(lead.tanggal_masuk).getTime() <= SATU_MINGGU_MS,
     ).length;
 
     // Total estimasi nilai dari lead yang masih "hidup" (belum closing,
     // belum hilang) — potensi revenue yang belum terealisasi.
-    const pipelineAktif = leads
+    const pipelineAktif = leadsInBrand
       .filter((lead) => lead.status !== "Closing" && lead.status !== "Hilang")
       .reduce((sum, lead) => sum + (lead.estimasi_nilai ?? 0), 0);
 
@@ -73,7 +83,7 @@ export default function Dashboard() {
       pipelineAktif,
       nilaiClosing,
     };
-  }, [leads, now]);
+  }, [leads, now, brandFilter]);
 
   if (loading) return <p className="p-8">Loading dashboard...</p>;
   if (error) return <p className="p-8 text-red-600">Failed to load: {error}</p>;

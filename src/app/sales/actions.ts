@@ -45,6 +45,7 @@ export async function createSales(
   const email = String(formData.get("email") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const brandId = String(formData.get("brand_id") ?? "").trim();
 
   if (!nama || !email || !password) {
     return { error: "Name, email, and password are required." };
@@ -65,16 +66,38 @@ export async function createSales(
     return { error: error?.message ?? "Failed to create sales account." };
   }
 
-  // Trigger handle_new_user sudah insert baris profiles; lengkapi no telp.
+  // Trigger handle_new_user sudah insert baris profiles; lengkapi no telp
+  // & brand (tim sales mana yang dia tangani — menentukan pool "belum
+  // diklaim" mana yang boleh dia lihat).
   const { error: profileError } = await admin
     .from("profiles")
-    .update({ phone: phone || null })
+    .update({ phone: phone || null, brand_id: brandId || null })
     .eq("id", data.user.id);
 
   if (profileError) {
     return { error: profileError.message };
   }
 
+  revalidatePath("/sales");
+  return { success: true };
+}
+
+// Ganti brand (tim sales) seorang akun sales. Dipanggil dari dropdown per
+// baris di tabel Sales Team.
+export async function updateSalesBrand(
+  profileId: string,
+  brandId: string | null,
+): Promise<SalesActionState> {
+  const adminCheck = await requireAdmin();
+  if (!adminCheck.ok) return { error: adminCheck.error };
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({ brand_id: brandId })
+    .eq("id", profileId);
+
+  if (error) return { error: error.message };
   revalidatePath("/sales");
   return { success: true };
 }

@@ -6,11 +6,21 @@ import {
 } from "@/lib/types";
 
 // Daftar kolom CSV untuk fitur Export CSV di ProspekTable: header yang
-// muncul di file, dan cara mengambil nilainya dari satu baris Lead.
-const KOLOM: { header: string; value: (lead: Lead) => string }[] = [
+// muncul di file, dan cara mengambil nilainya dari satu baris Lead. Kolom
+// "Brand" butuh nama brand (bukan cuma id), jadi diberi peta id->nama lewat
+// leadsToCsv() — lihat komentar di sana.
+const KOLOM: {
+  header: string;
+  value: (lead: Lead, brandNames: Record<string, string>) => string;
+}[] = [
   { header: "Name", value: (lead) => lead.nama },
   { header: "Contact", value: (lead) => lead.kontak },
   { header: "Source", value: (lead) => lead.sumber ?? "" },
+  {
+    header: "Brand",
+    value: (lead, brandNames) =>
+      (lead.brand_id && brandNames[lead.brand_id]) || "",
+  },
   { header: "Company", value: (lead) => lead.perusahaan ?? "" },
   { header: "Job Title", value: (lead) => lead.jabatan ?? "" },
   { header: "Email", value: (lead) => lead.email ?? "" },
@@ -43,10 +53,15 @@ function escapeCsvField(field: string): string {
 }
 
 // Ubah daftar lead jadi teks CSV siap didownload (dipakai tombol Export CSV).
-export function leadsToCsv(leads: Lead[]): string {
+// `brandNames` = peta brand id -> nama brand (dari useBrands() di pemanggil),
+// dipakai cuma untuk mengisi kolom "Brand" dengan nama, bukan id mentah.
+export function leadsToCsv(
+  leads: Lead[],
+  brandNames: Record<string, string> = {},
+): string {
   const header = KOLOM.map((k) => escapeCsvField(k.header)).join(",");
   const rows = leads.map((lead) =>
-    KOLOM.map((k) => escapeCsvField(k.value(lead))).join(","),
+    KOLOM.map((k) => escapeCsvField(k.value(lead, brandNames))).join(","),
   );
   return [header, ...rows].join("\n");
 }

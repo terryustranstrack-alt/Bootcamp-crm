@@ -15,6 +15,8 @@ import { createClient } from "@/lib/supabase/client";
 import { logStatusChange } from "@/lib/activity";
 import { needsFollowUp } from "@/lib/reminders";
 import { useProfiles, profileLabel } from "@/lib/useProfiles";
+import { useCurrentProfile } from "@/lib/useCurrentProfile";
+import { useBrands } from "@/lib/useBrands";
 import {
   LEAD_STATUSES,
   leadStatusLabel,
@@ -145,7 +147,10 @@ export default function LeadBoard() {
   const [sumberFilter, setSumberFilter] = useState(SEMUA_SUMBER);
   const [assigneeFilter, setAssigneeFilter] = useState(SEMUA_ASSIGNEE);
   const [followUpOnly, setFollowUpOnly] = useState(false);
+  const [brandFilter, setBrandFilter] = useState<string>("all");
   const profiles = useProfiles();
+  const brands = useBrands();
+  const { profile: currentProfile } = useCurrentProfile();
 
   async function loadLeads() {
     const { data, error } = await supabase
@@ -231,9 +236,12 @@ export default function LeadBoard() {
         assigneeFilter === SEMUA_ASSIGNEE || lead.assigned_to === assigneeFilter;
       const cocokFollowUp =
         !followUpOnly || needsFollowUp(lead.status, lead.tanggal_update);
-      return cocokPencarian && cocokSumber && cocokAssignee && cocokFollowUp;
+      const cocokBrand = brandFilter === "all" || lead.brand_id === brandFilter;
+      return (
+        cocokPencarian && cocokSumber && cocokAssignee && cocokFollowUp && cocokBrand
+      );
     });
-  }, [leads, search, sumberFilter, assigneeFilter, followUpOnly]);
+  }, [leads, search, sumberFilter, assigneeFilter, followUpOnly, brandFilter]);
 
   if (loading) return <p className="p-8">Loading leads...</p>;
   if (error) return <p className="p-8 text-red-600">Failed to load: {error}</p>;
@@ -279,6 +287,20 @@ export default function LeadBoard() {
           />
           Needs follow-up
         </label>
+        {currentProfile?.is_admin && brands.length > 1 && (
+          <select
+            value={brandFilter}
+            onChange={(e) => setBrandFilter(e.target.value)}
+            className="border rounded px-3 py-2 text-sm"
+          >
+            <option value="all">All brands</option>
+            {brands.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <div className="flex gap-4 overflow-x-auto">

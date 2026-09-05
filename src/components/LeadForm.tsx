@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useSumberOptions } from "@/lib/useSumberOptions";
 import { useProfiles, profileLabel } from "@/lib/useProfiles";
 import { useCurrentProfile } from "@/lib/useCurrentProfile";
+import { useBrands } from "@/lib/useBrands";
 import SumberSelect from "@/components/SumberSelect";
 import AssigneeSelect from "@/components/AssigneeSelect";
 import CurrencyInput from "@/components/CurrencyInput";
@@ -23,6 +24,7 @@ const EMPTY_FORM = {
   email: "",
   catatan: "",
   assigned_to: "",
+  brand_id: "",
 };
 
 type LeadFormValues = typeof EMPTY_FORM;
@@ -65,6 +67,17 @@ export default function LeadForm({
   const sumberOptions = useSumberOptions();
   const profiles = useProfiles();
   const { profile: currentProfile } = useCurrentProfile();
+  const brands = useBrands();
+
+  // Admin bisa pilih brand mana; default ke brand default (nomor yang sudah
+  // jalan) begitu daftar brand datang, kalau belum dipilih apa-apa.
+  useEffect(() => {
+    if (form.brand_id || brands.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm((f) =>
+      f.brand_id ? f : { ...f, brand_id: (brands.find((b) => b.is_default) ?? brands[0]).id },
+    );
+  }, [brands, form.brand_id]);
 
   // Nomor kontak baru diketik ulang — reset peringatan duplikat lama
   // karena sudah tidak relevan lagi untuk nomor yang baru.
@@ -121,6 +134,9 @@ export default function LeadForm({
         assigned_to: currentProfile?.is_admin
           ? form.assigned_to || null
           : (currentProfile?.id ?? null),
+        brand_id: currentProfile?.is_admin
+          ? form.brand_id || null
+          : (currentProfile?.brand_id ?? null),
       })
       .select("id")
       .single();
@@ -277,6 +293,26 @@ export default function LeadForm({
           className="border rounded px-3 py-2"
         />
       </div>
+
+      {currentProfile?.is_admin && brands.length > 1 && (
+        <div className="flex flex-col gap-1">
+          <label htmlFor="brand_id" className="text-sm font-medium">
+            Brand
+          </label>
+          <select
+            id="brand_id"
+            value={form.brand_id}
+            onChange={(e) => setForm({ ...form, brand_id: e.target.value })}
+            className="border rounded px-3 py-2"
+          >
+            {brands.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="flex flex-col gap-1">
         <label htmlFor="assigned_to" className="text-sm font-medium">

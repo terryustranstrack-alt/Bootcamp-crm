@@ -7,6 +7,7 @@ import { logNote, logStatusChange } from "@/lib/activity";
 import { useSumberOptions } from "@/lib/useSumberOptions";
 import { useProfiles, profileLabel } from "@/lib/useProfiles";
 import { useCurrentProfile } from "@/lib/useCurrentProfile";
+import { useBrands } from "@/lib/useBrands";
 import SumberSelect from "@/components/SumberSelect";
 import AssigneeSelect from "@/components/AssigneeSelect";
 import CurrencyInput from "@/components/CurrencyInput";
@@ -63,6 +64,8 @@ export default function ProspekTable() {
   const [search, setSearch] = useState("");
   const [followUpOnly, setFollowUpOnly] = useState(false);
   const [filterDate, setFilterDate] = useState("");
+  const [brandFilter, setBrandFilter] = useState("all");
+  const brands = useBrands();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<LeadEditForm>(EMPTY_EDIT_FORM);
   const [saving, setSaving] = useState(false);
@@ -109,9 +112,10 @@ export default function ProspekTable() {
       ) {
         return false;
       }
+      if (brandFilter !== "all" && lead.brand_id !== brandFilter) return false;
       return true;
     });
-  }, [leads, search, followUpOnly, filterDate]);
+  }, [leads, search, followUpOnly, filterDate, brandFilter]);
 
   // Baca file CSV yang dipilih user, parse jadi baris-baris lead lewat
   // parseLeadsCsv, lalu insert semuanya sekaligus ke database.
@@ -237,6 +241,20 @@ export default function ProspekTable() {
             placeholder="Search name..."
             className="border rounded px-3 py-2 text-sm w-64"
           />
+          {currentProfile?.is_admin && brands.length > 1 && (
+            <select
+              value={brandFilter}
+              onChange={(e) => setBrandFilter(e.target.value)}
+              className="border rounded px-3 py-2 text-sm"
+            >
+              <option value="all">All brands</option>
+              {brands.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          )}
           <label className="flex items-center gap-2 border rounded px-3 py-2 text-sm">
             <input
               type="checkbox"
@@ -262,9 +280,15 @@ export default function ProspekTable() {
           )}
           <button
             type="button"
-            onClick={() =>
-              downloadCsv(`leads-${Date.now()}.csv`, leadsToCsv(leads))
-            }
+            onClick={() => {
+              const brandNames = Object.fromEntries(
+                brands.map((b) => [b.id, b.name]),
+              );
+              downloadCsv(
+                `leads-${Date.now()}.csv`,
+                leadsToCsv(leads, brandNames),
+              );
+            }}
             className="border rounded px-3 py-2 text-sm hover:bg-gray-50"
           >
             Export CSV

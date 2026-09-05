@@ -5,6 +5,10 @@ import { createClient } from "@/lib/supabase/client";
 import { useProfiles, profileLabel } from "@/lib/useProfiles";
 import type { Conversation } from "@/lib/types";
 
+// Irisan kecil dari tabel leads — cuma untuk menghitung berapa yang dibuat
+// otomatis oleh bot, per brand.
+type BotLeadSlice = { id: string; brand_id: string | null };
+
 const supabase = createClient();
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -33,10 +37,14 @@ function formatDuration(ms: number | null): string {
 // Blok metrik WhatsApp Inbox di halaman Dashboard: percakapan terbuka,
 // yang menunggu dibalas, rata-rata waktu balasan pertama, dan sebaran
 // beban per sales. Semua dihitung di sisi klien (pola sama seperti Dashboard).
-export default function ChatMetrics() {
+export default function ChatMetrics({
+  brandFilter = "all",
+}: {
+  brandFilter?: string;
+}) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<MessageSlice[]>([]);
-  const [botLeadCount, setBotLeadCount] = useState(0);
+  const [botLeads, setBotLeads] = useState<BotLeadSlice[]>([]);
   const [loading, setLoading] = useState(true);
   const profiles = useProfiles();
 
@@ -53,11 +61,12 @@ export default function ChatMetrics() {
             )
             .gte("wa_timestamp", since)
             .order("wa_timestamp", { ascending: true }),
-          // Jumlah lead yang dibuat otomatis oleh bot (mengikuti RLS: sales
-          // biasa melihat miliknya sendiri, admin melihat semua).
+          // Lead yang dibuat otomatis oleh bot (mengikuti RLS: sales biasa
+          // melihat miliknya sendiri, admin melihat semua) — brand_id ikut
+          // diambil supaya bisa dipersempit per brand di bawah.
           supabase
             .from("leads")
-            .select("id", { count: "exact", head: true })
+            .select("id, brand_id")
             .eq("created_by_bot", true),
         ]);
       if (conversationsResult.data) {
@@ -66,20 +75,35 @@ export default function ChatMetrics() {
       if (messagesResult.data) {
         setMessages(messagesResult.data as MessageSlice[]);
       }
-      setBotLeadCount(botLeadsResult.count ?? 0);
+      if (botLeadsResult.data) {
+        setBotLeads(botLeadsResult.data as BotLeadSlice[]);
+      }
       setLoading(false);
     }
     load();
   }, []);
 
   const stats = useMemo(() => {
-    const openConversations = conversations.filter(
+    const conversationsInBrand =
+      brandFilter === "all"
+        ? conversations
+        : conversations.filter((c) => c.brand_id === brandFilter);
+    const conversationIds = new Set(conversationsInBrand.map((c) => c.id));
+    const messagesInBrand = messages.filter((m) =>
+      conversationIds.has(m.conversation_id),
+    );
+    const botLeadCount =
+      brandFilter === "all"
+        ? botLeads.length
+        : botLeads.filter((l) => l.brand_id === brandFilter).length;
+
+    const openConversations = conversationsInBrand.filter(
       (c) => c.status !== "resolved",
     );
 
     // Kelompokkan pesan per percakapan (sudah terurut naik dari query).
     const messagesByConversation = new Map<string, MessageSlice[]>();
-    for (const msg of messages) {
+    for (const msg of messagesInBrand) {
       const list = messagesByConversation.get(msg.conversation_id) ?? [];
       list.push(msg);
       messagesByConversation.set(msg.conversation_id, list);
@@ -112,7 +136,7 @@ export default function ChatMetrics() {
         : null;
 
     // Balasan yang dikirim otomatis oleh chatbot (30 hari terakhir).
-    const botReplies = messages.filter(
+    const botReplies = messagesInBrand.filter(
       (m) => m.direction === "outbound" && m.sent_by_bot,
     ).length;
 
@@ -131,9 +155,10 @@ export default function ChatMetrics() {
       unanswered,
       avgReplyMs,
       botReplies,
+      botLeadCount,
       perSales: perSales.filter((s) => s.count > 0),
     };
-  }, [conversations, messages, profiles]);
+  }, [conversations, messages, botLeads, profiles, brandFilter]);
 
   if (loading) {
     return (
@@ -175,7 +200,7 @@ export default function ChatMetrics() {
           </div>
           <div className="border rounded p-4">
             <p className="text-xs text-gray-500">Leads captured by bot</p>
-            <p className="text-2xl font-semibold">{botLeadCount}</p>
+            <p className="text-2xl font-semibold">{stats.botLeadCount}</p>
           </div>
         </div>
       </div>

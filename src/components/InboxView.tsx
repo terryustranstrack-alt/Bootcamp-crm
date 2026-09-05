@@ -18,6 +18,7 @@ import TemplatePicker from "@/components/TemplatePicker";
 import QuickReplyPicker from "@/components/QuickReplyPicker";
 import { useProfiles, profileLabel } from "@/lib/useProfiles";
 import { useCurrentProfile } from "@/lib/useCurrentProfile";
+import { useBrands } from "@/lib/useBrands";
 import { searchMessages, type MessageSearchHit } from "@/lib/searchInbox";
 import type { Conversation, Lead, Message } from "@/lib/types";
 
@@ -130,6 +131,10 @@ export default function InboxView() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const profiles = useProfiles();
   const { profile: currentProfile } = useCurrentProfile();
+  const brands = useBrands();
+  // "all" = tidak difilter — cuma admin yang punya lebih dari satu brand
+  // untuk difilter (sales biasa cuma pernah lihat brand-nya sendiri lewat RLS).
+  const [brandFilter, setBrandFilter] = useState<string>("all");
   const [filter, setFilter] = useState<FilterKey>("all");
   const [search, setSearch] = useState("");
   const [messageHits, setMessageHits] = useState<MessageSearchHit[] | null>(null);
@@ -164,6 +169,7 @@ export default function InboxView() {
       if (filter === "followup" && !needsFollowUp(c)) return false;
       if (filter === "unclaimed" && c.assigned_to) return false;
       if (filter === "mine" && !mine) return false;
+      if (brandFilter !== "all" && c.brand_id !== brandFilter) return false;
       if (keyword) {
         const haystack = `${c.display_name ?? ""} ${c.external_contact_id} ${
           c.last_message_preview ?? ""
@@ -172,7 +178,7 @@ export default function InboxView() {
       }
       return true;
     });
-  }, [conversations, filter, search, currentProfile?.id]);
+  }, [conversations, filter, brandFilter, search, currentProfile?.id]);
 
   // Cari di dalam isi pesan (server) — debounce 300ms saat mengetik.
   useEffect(() => {
@@ -320,6 +326,22 @@ export default function InboxView() {
               className="w-full border rounded px-3 py-1.5 text-sm"
             />
           </div>
+          {currentProfile?.is_admin && brands.length > 1 && (
+            <div className="px-3 pb-2">
+              <select
+                value={brandFilter}
+                onChange={(e) => setBrandFilter(e.target.value)}
+                className="border rounded px-2 py-1 text-xs w-full"
+              >
+                <option value="all">All brands</option>
+                {brands.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="px-2 pb-2 flex flex-wrap gap-1">
             {FILTERS.map((f) => (
               <button
