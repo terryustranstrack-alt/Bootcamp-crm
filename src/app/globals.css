@@ -1,26 +1,75 @@
 @import "tailwindcss";
 
+/* Design tokens (v2 — logo identity). The logo is a red chat bubble (the
+   product's WhatsApp/omnichannel core) inside a black orbital ring —
+   so black is the structural/action color (buttons, active nav — also
+   what this app already used before any redesign) and the logo's red is
+   the ONE accent, spent deliberately: the mark itself, active nav, and
+   one hero number per screen. Red is also this app's existing destructive
+   color (Lost, delete, errors) — rather than fight that by inventing a
+   second competing red, they're the same value on purpose: the brand and
+   "pay attention here" share one red, they just never share a button
+   (primary actions are black; only destructive/urgent things are red).
+   Emerald for success/won, amber for attention/unclaimed (existing
+   amber-600), violet reserved only for the AI chatbot (existing "🤖 →
+   follow up" tag) so "the bot did this" stays one consistent color. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #0f172a;
+
+  --color-brand: #171717;
+  --color-brand-hover: #000000;
+  --color-on-brand: #ffffff;
+
+  --color-accent: #dc2626;
+  --color-accent-hover: #b91c1c;
+  --color-on-accent: #ffffff;
+
+  --color-success: #059669;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-ai: #7c3aed;
+
+  --color-surface: #ffffff;
+  --color-muted: #475569;
+  --color-muted-bg: #f1f5fd;
+  --color-border: #e2e8f0;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-brand: var(--color-brand);
+  --color-brand-hover: var(--color-brand-hover);
+  --color-on-brand: var(--color-on-brand);
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-on-accent: var(--color-on-accent);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-danger: var(--color-danger);
+  --color-ai: var(--color-ai);
+  --color-surface: var(--color-surface);
+  --color-muted: var(--color-muted);
+  --color-muted-bg: var(--color-muted-bg);
+  --color-border: var(--color-border);
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-data);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Signature detail: anything measured, counted, or timestamped — phone
+   numbers, currency, dates, message timestamps — renders in the data face
+   with tabular figures, so columns of numbers actually line up. This is
+   deliberate, not decorative: a fleet-tracking company's CRM should look
+   like it takes tracked data seriously. Apply with the `font-data` class. */
+.font-data {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-variant-numeric: tabular-nums;
 }

@@ -237,23 +237,25 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
     router.push("/");
   }
 
-  if (loading) return <p className="p-8">Loading lead...</p>;
-  if (error) return <p className="p-8 text-red-600">Failed to load: {error}</p>;
-  if (!lead) return <p className="p-8">Lead not found.</p>;
+  if (loading) return <p className="p-8 text-sm text-[var(--color-muted)]">Loading lead...</p>;
+  if (error) {
+    return <p className="p-8 text-sm text-[var(--color-danger)]">Failed to load: {error}</p>;
+  }
+  if (!lead) return <p className="p-8 text-sm text-[var(--color-muted)]">Lead not found.</p>;
 
   return (
     <main className="p-8 max-w-2xl flex flex-col gap-6">
       <Link
         href="/"
-        className="text-sm text-gray-500 hover:underline self-start"
+        className="text-sm text-[var(--color-muted)] hover:text-foreground hover:underline self-start"
       >
         ← Back to Board
       </Link>
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">{lead.nama}</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-semibold tracking-tight">{lead.nama}</h1>
+          <p className="text-sm text-[var(--color-muted)]">
             Added: {new Date(lead.tanggal_masuk).toLocaleString("id-ID")} ·
             Last updated:{" "}
             {new Date(lead.tanggal_update).toLocaleString("id-ID")}
@@ -261,7 +263,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
           {hasWaConversation && (
             <Link
               href="/inbox"
-              className="text-sm text-green-700 hover:underline"
+              className="text-sm text-[var(--color-success)] hover:underline"
             >
               💬 Has a WhatsApp conversation — View in Inbox
             </Link>
@@ -272,7 +274,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
             <button
               type="button"
               onClick={startEdit}
-              className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50"
+              className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 hover:bg-[var(--color-muted-bg)]"
             >
               Edit
             </button>
@@ -282,7 +284,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
             onClick={handleDelete}
             disabled={deleting}
             onBlur={() => setConfirmDelete(false)}
-            className="text-sm text-red-600 border border-red-600 rounded px-3 py-1.5 hover:bg-red-50 disabled:opacity-50"
+            className="text-sm text-[var(--color-danger)] border border-[var(--color-danger)] rounded-lg px-3 py-1.5 hover:bg-red-50 disabled:opacity-50"
           >
             {deleting
               ? "Deleting..."
@@ -296,7 +298,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
       {isEditing ? (
         <form
           onSubmit={handleSaveEdit}
-          className="flex flex-col gap-4 border rounded p-4"
+          className="flex flex-col gap-4 border border-[var(--color-border)] rounded-xl p-4"
         >
           <div className="flex flex-col gap-1">
             <label htmlFor="edit-nama" className="text-sm font-medium">
@@ -309,7 +311,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               onChange={(e) =>
                 setEditForm({ ...editForm, nama: e.target.value })
               }
-              className="border rounded px-3 py-2"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
 
@@ -324,7 +326,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               onChange={(e) =>
                 setEditForm({ ...editForm, kontak: e.target.value })
               }
-              className="border rounded px-3 py-2"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
 
@@ -350,7 +352,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               onChange={(e) =>
                 setEditForm({ ...editForm, perusahaan: e.target.value })
               }
-              className="border rounded px-3 py-2"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
 
@@ -364,7 +366,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               onChange={(e) =>
                 setEditForm({ ...editForm, jabatan: e.target.value })
               }
-              className="border rounded px-3 py-2"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
 
@@ -379,7 +381,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               onChange={(e) =>
                 setEditForm({ ...editForm, email: e.target.value })
               }
-              className="border rounded px-3 py-2"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
 
@@ -393,7 +395,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               onChange={(e) =>
                 setEditForm({ ...editForm, kota: e.target.value })
               }
-              className="border rounded px-3 py-2"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
 
@@ -407,7 +409,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               onChange={(e) =>
                 setEditForm({ ...editForm, produk: e.target.value })
               }
-              className="border rounded px-3 py-2"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
 
@@ -424,7 +426,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               onChange={(estimasi_nilai) =>
                 setEditForm({ ...editForm, estimasi_nilai })
               }
-              className="border rounded px-3 py-2"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
 
@@ -439,7 +441,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
                 setEditForm({ ...editForm, catatan: e.target.value })
               }
               rows={3}
-              className="border rounded px-3 py-2"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
 
@@ -457,7 +459,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
                 profiles={profiles}
               />
             ) : (
-              <p className="text-sm text-gray-500 px-3 py-2 border rounded bg-gray-50">
+              <p className="text-sm text-[var(--color-muted)] px-3 py-2 border border-[var(--color-border)] rounded-lg bg-[var(--color-muted-bg)]">
                 {currentProfile ? profileLabel(currentProfile) : "-"}
               </p>
             )}
@@ -467,7 +469,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
             <button
               type="submit"
               disabled={saving}
-              className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
+              className="bg-brand text-on-brand hover:bg-[var(--color-brand-hover)] rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save Changes"}
             </button>
@@ -475,7 +477,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
               type="button"
               onClick={() => setIsEditing(false)}
               disabled={saving}
-              className="border rounded px-4 py-2 text-sm hover:bg-gray-50"
+              className="border border-[var(--color-border)] rounded-lg px-4 py-2 text-sm hover:bg-[var(--color-muted-bg)]"
             >
               Cancel
             </button>
@@ -483,49 +485,49 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
         </form>
       ) : (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-          <dt className="text-gray-500">Contact</dt>
+          <dt className="text-[var(--color-muted)]">Contact</dt>
           <dd>{lead.kontak}</dd>
 
-          <dt className="text-gray-500">Source</dt>
+          <dt className="text-[var(--color-muted)]">Source</dt>
           <dd>{lead.sumber || "-"}</dd>
 
-          <dt className="text-gray-500">Company</dt>
+          <dt className="text-[var(--color-muted)]">Company</dt>
           <dd>{lead.perusahaan || "-"}</dd>
 
-          <dt className="text-gray-500">Job title</dt>
+          <dt className="text-[var(--color-muted)]">Job title</dt>
           <dd>{lead.jabatan || "-"}</dd>
 
-          <dt className="text-gray-500">Email</dt>
+          <dt className="text-[var(--color-muted)]">Email</dt>
           <dd>{lead.email || "-"}</dd>
 
-          <dt className="text-gray-500">City/region</dt>
+          <dt className="text-[var(--color-muted)]">City/region</dt>
           <dd>{lead.kota || "-"}</dd>
 
-          <dt className="text-gray-500">Product/need</dt>
+          <dt className="text-[var(--color-muted)]">Product/need</dt>
           <dd>{lead.produk || "-"}</dd>
 
-          <dt className="text-gray-500">Estimated value</dt>
+          <dt className="text-[var(--color-muted)]">Estimated value</dt>
           <dd>
             {lead.estimasi_nilai != null
               ? lead.estimasi_nilai.toLocaleString("id-ID")
               : "-"}
           </dd>
 
-          <dt className="text-gray-500">Assigned to</dt>
+          <dt className="text-[var(--color-muted)]">Assigned to</dt>
           <dd>
             {profiles.find((p) => p.id === lead.assigned_to)
               ? profileLabel(profiles.find((p) => p.id === lead.assigned_to)!)
               : "Unassigned"}
           </dd>
 
-          <dt className="text-gray-500">Status</dt>
+          <dt className="text-[var(--color-muted)]">Status</dt>
           <dd>
             <select
               value={lead.status}
               onChange={(e) =>
                 handleStatusChange(e.target.value as LeadStatus)
               }
-              className="border rounded text-sm px-2 py-1"
+              className="border border-[var(--color-border)] rounded-lg text-sm px-2 py-1"
             >
               {LEAD_STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -540,7 +542,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
       {!isEditing && lead.catatan && (
         <div>
           <h2 className="font-medium mb-2">Notes / requirements</h2>
-          <pre className="whitespace-pre-wrap text-sm bg-gray-50 border rounded p-3">
+          <pre className="whitespace-pre-wrap text-sm bg-[var(--color-muted-bg)] border border-[var(--color-border)] rounded-lg p-3">
             {lead.catatan}
           </pre>
         </div>
@@ -553,13 +555,13 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
             value={catatanBaru}
             onChange={(e) => setCatatanBaru(e.target.value)}
             placeholder="Add a new note..."
-            className="border rounded px-3 py-2 text-sm"
+            className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
             rows={3}
           />
           <button
             type="submit"
             disabled={submitting || !catatanBaru.trim()}
-            className="self-start bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
+            className="self-start bg-brand text-on-brand hover:bg-[var(--color-brand-hover)] rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
           >
             {submitting ? "Saving..." : "Add Note"}
           </button>
@@ -567,14 +569,14 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
 
         <ul className="flex flex-col gap-3">
           {activities.length === 0 && (
-            <li className="text-sm text-gray-500">No activity yet.</li>
+            <li className="text-sm text-[var(--color-muted)]">No activity yet.</li>
           )}
           {activities.map((activity) => (
             <li
               key={activity.id}
-              className="border rounded p-3 text-sm bg-white"
+              className="border border-[var(--color-border)] rounded-lg p-3 text-sm bg-[var(--color-surface)]"
             >
-              <p className="text-xs text-gray-500 mb-1">
+              <p className="text-xs text-[var(--color-muted)] mb-1">
                 {new Date(activity.created_at).toLocaleString("id-ID")}
               </p>
               {activity.type === "status_change" ? (
@@ -590,7 +592,7 @@ export default function LeadDetail({ leadId }: { leadId: string }) {
                 </p>
               ) : activity.type === "whatsapp_message" ? (
                 <p className="whitespace-pre-wrap">
-                  <span className="text-green-700 font-medium">WhatsApp: </span>
+                  <span className="text-[var(--color-success)] font-medium">WhatsApp: </span>
                   {activity.content}
                 </p>
               ) : (

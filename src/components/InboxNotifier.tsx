@@ -13,7 +13,7 @@ export default function InboxNotifier() {
   } = useInboxUnread();
 
   return (
-    <div className="flex items-center gap-3 text-xs text-gray-500">
+    <div className="flex items-center gap-3 text-xs text-[var(--color-muted)]">
       {notificationPermission === "default" && (
         <button
           type="button"

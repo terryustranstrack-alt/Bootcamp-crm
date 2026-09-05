@@ -115,7 +115,7 @@ export default function SettingsView() {
 
   return (
     <main className="p-8 flex flex-col gap-8 max-w-2xl">
-      <h1 className="text-xl font-semibold">Settings</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
@@ -124,46 +124,46 @@ export default function SettingsView() {
             type="button"
             onClick={handleSync}
             disabled={isPending}
-            className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+            className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 hover:bg-[var(--color-muted-bg)] disabled:opacity-50"
           >
             {isPending ? "Syncing…" : "Sync from Meta"}
           </button>
         </div>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-[var(--color-muted)]">
           Templates are created and approved in WhatsApp Manager, then synced
           here. Only approved templates can be sent from the inbox.
         </p>
-        {syncMessage && <p className="text-sm text-gray-600">{syncMessage}</p>}
+        {syncMessage && <p className="text-sm text-[var(--color-muted)]">{syncMessage}</p>}
 
         {templatesLoading ? (
-          <p className="text-sm text-gray-500">Loading…</p>
+          <p className="text-sm text-[var(--color-muted)]">Loading…</p>
         ) : templates.length === 0 ? (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-[var(--color-muted)]">
             No templates synced yet.
           </p>
         ) : (
-          <ul className="flex flex-col divide-y border rounded">
+          <ul className="flex flex-col divide-y divide-[var(--color-border)] border border-[var(--color-border)] rounded-lg">
             {templates.map((t) => (
               <li key={t.id} className="p-3 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium">
                     {t.name}{" "}
-                    <span className="text-gray-400 font-normal">
+                    <span className="text-[var(--color-muted)] font-normal">
                       ({t.language})
                     </span>
                   </span>
                   <span
                     className={`text-xs ${
                       t.status === "APPROVED"
-                        ? "text-green-600"
-                        : "text-amber-600"
+                        ? "text-[var(--color-success)]"
+                        : "text-[var(--color-warning)]"
                     }`}
                   >
                     {t.status ?? "—"}
                   </span>
                 </div>
                 {t.body_text && (
-                  <p className="text-xs text-gray-500 mt-1 whitespace-pre-wrap">
+                  <p className="text-xs text-[var(--color-muted)] mt-1 whitespace-pre-wrap">
                     {t.body_text}
                   </p>
                 )}
@@ -175,38 +175,40 @@ export default function SettingsView() {
 
       <section className="flex flex-col gap-3">
         <h2 className="font-medium">Quick replies</h2>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-[var(--color-muted)]">
           Reusable snippets everyone can insert into a reply from the inbox.
         </p>
 
-        <div className="flex flex-col gap-2 border rounded p-3">
+        <div className="flex flex-col gap-2 border border-[var(--color-border)] rounded-lg p-3">
           <input
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="Title (e.g. Office address)"
-            className="border rounded px-3 py-2 text-sm"
+            className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
           />
           <textarea
             value={newBody}
             onChange={(e) => setNewBody(e.target.value)}
             placeholder="Message text"
             rows={3}
-            className="border rounded px-3 py-2 text-sm"
+            className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
           />
           <button
             type="button"
             onClick={handleAddQuickReply}
             disabled={!newTitle.trim() || !newBody.trim()}
-            className="bg-black text-white rounded px-3 py-1.5 text-sm self-start disabled:opacity-50"
+            className="bg-brand text-on-brand hover:bg-[var(--color-brand-hover)] rounded-lg px-3 py-1.5 text-sm self-start font-medium transition-colors disabled:opacity-50"
           >
             Add quick reply
           </button>
-          {qrError && <p className="text-red-600 text-xs">{qrError}</p>}
+          {qrError && (
+            <p className="text-[var(--color-danger)] text-xs">{qrError}</p>
+          )}
         </div>
 
-        <ul className="flex flex-col divide-y border rounded">
+        <ul className="flex flex-col divide-y divide-[var(--color-border)] border border-[var(--color-border)] rounded-lg">
           {quickReplies.length === 0 && (
-            <li className="p-3 text-sm text-gray-500">No quick replies yet.</li>
+            <li className="p-3 text-sm text-[var(--color-muted)]">No quick replies yet.</li>
           )}
           {quickReplies.map((qr) => (
             <li
@@ -217,19 +219,19 @@ export default function SettingsView() {
                 <span className="font-medium block">
                   {qr.title}{" "}
                   {qr.owner_id && (
-                    <span className="text-xs text-gray-400 font-normal">
+                    <span className="text-xs text-[var(--color-muted)] font-normal">
                       (personal)
                     </span>
                   )}
                 </span>
-                <span className="text-xs text-gray-500 whitespace-pre-wrap">
+                <span className="text-xs text-[var(--color-muted)] whitespace-pre-wrap">
                   {qr.body}
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => handleDeleteQuickReply(qr.id)}
-                className="text-xs text-red-600 hover:underline shrink-0"
+                className="text-xs text-[var(--color-danger)] hover:underline shrink-0"
               >
                 Delete
               </button>
@@ -240,7 +242,7 @@ export default function SettingsView() {
 
       <section className="flex flex-col gap-3">
         <h2 className="font-medium">AI chatbot</h2>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-[var(--color-muted)]">
           When enabled, unclaimed incoming WhatsApp messages get an automatic
           reply from an AI assistant. It stops as soon as a person claims the
           conversation, and hands off on anything it&apos;s unsure about. It
@@ -254,11 +256,11 @@ export default function SettingsView() {
 
         {brands.length > 1 && (
           <label className="flex flex-col gap-1 max-w-xs">
-            <span className="text-xs text-gray-500">Brand (WhatsApp number)</span>
+            <span className="text-xs text-[var(--color-muted)]">Brand (WhatsApp number)</span>
             <select
               value={selectedBrandId ?? ""}
               onChange={(e) => setSelectedBrandId(e.target.value)}
-              className="border rounded px-3 py-2 text-sm"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
             >
               {brands.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -270,9 +272,9 @@ export default function SettingsView() {
         )}
 
         {!bot ? (
-          <p className="text-sm text-gray-500">Loading…</p>
+          <p className="text-sm text-[var(--color-muted)]">Loading…</p>
         ) : (
-          <div className="flex flex-col gap-3 border rounded p-3">
+          <div className="flex flex-col gap-3 border border-[var(--color-border)] rounded-lg p-3">
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -283,7 +285,7 @@ export default function SettingsView() {
             </label>
 
             <label className="flex flex-col gap-1">
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-[var(--color-muted)]">
                 Welcome message — sent word-for-word the first time a new
                 contact messages, before the AI takes over. Use it to greet
                 and ask for the details you want (name, email, job title,
@@ -299,12 +301,12 @@ export default function SettingsView() {
                 placeholder={
                   "Halo! 👋 Terima kasih sudah menghubungi TransTRACK. Saya Ratih. Supaya tim kami bisa membantu dengan tepat, boleh dibantu isi:\n1. Nama\n2. Email\n3. Jabatan\n4. Perusahaan\n5. Kota\n6. Kebutuhan Anda (mis. jumlah & jenis kendaraan)"
                 }
-                className="border rounded px-3 py-2 text-sm"
+                className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
               />
             </label>
 
             <label className="flex flex-col gap-1">
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-[var(--color-muted)]">
                 System prompt (who the bot is, how it should behave)
               </span>
               <textarea
@@ -314,12 +316,12 @@ export default function SettingsView() {
                 }
                 rows={4}
                 placeholder="You are the assistant for TransTRACK, a fleet management company. Greet new leads warmly, answer basic questions, and offer to connect them with a sales rep."
-                className="border rounded px-3 py-2 text-sm"
+                className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
               />
             </label>
 
             <label className="flex flex-col gap-1">
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-[var(--color-muted)]">
                 FAQ / reference info the bot may use to answer
               </span>
               <textarea
@@ -329,12 +331,12 @@ export default function SettingsView() {
                 placeholder={
                   "Q: What does TransTRACK do?\nA: GPS fleet tracking, fuel monitoring, driver management.\n\nQ: Office hours?\nA: Mon–Fri 9am–6pm WIB."
                 }
-                className="border rounded px-3 py-2 text-sm"
+                className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
               />
             </label>
 
             <label className="flex flex-col gap-1 max-w-xs">
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-[var(--color-muted)]">
                 Max bot replies per conversation
               </span>
               <input
@@ -347,7 +349,7 @@ export default function SettingsView() {
                     max_replies_per_conversation: Number(e.target.value) || 1,
                   })
                 }
-                className="border rounded px-3 py-2 text-sm"
+                className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
               />
             </label>
 
@@ -355,12 +357,12 @@ export default function SettingsView() {
               type="button"
               onClick={handleSaveBot}
               disabled={botSaving}
-              className="bg-black text-white rounded px-3 py-1.5 text-sm self-start disabled:opacity-50"
+              className="bg-brand text-on-brand hover:bg-[var(--color-brand-hover)] rounded-lg px-3 py-1.5 text-sm self-start font-medium transition-colors disabled:opacity-50"
             >
               {botSaving ? "Saving…" : "Save chatbot settings"}
             </button>
             {botMessage && (
-              <p className="text-sm text-gray-600">{botMessage}</p>
+              <p className="text-sm text-[var(--color-muted)]">{botMessage}</p>
             )}
           </div>
         )}

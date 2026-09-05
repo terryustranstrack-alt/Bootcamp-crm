@@ -33,15 +33,15 @@ export default function NavMenu({ isAdmin }: { isAdmin: boolean }) {
           <Link
             key={item.href}
             href={item.href}
-            className={`px-3 py-1.5 rounded text-sm flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors ${
               active
-                ? "bg-black text-white"
-                : "text-gray-600 hover:bg-gray-100"
+                ? "bg-accent text-on-accent"
+                : "text-[var(--color-muted)] hover:bg-[var(--color-muted-bg)] hover:text-foreground"
             }`}
           >
             {item.label}
             {showBadge && (
-              <span className="bg-red-600 text-white text-xs rounded-full px-1.5 min-w-5 text-center">
+              <span className="font-data bg-[var(--color-danger)] text-white text-xs rounded-full px-1.5 min-w-5 text-center">
                 {totalUnread}
               </span>
             )}

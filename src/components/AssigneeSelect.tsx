@@ -23,7 +23,7 @@ export default function AssigneeSelect({
       id={id}
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value || null)}
-      className="border rounded px-3 py-2"
+      className="border border-[var(--color-border)] rounded-lg px-3 py-2"
     >
       <option value="">Unassigned</option>
       {profiles.map((profile) => (

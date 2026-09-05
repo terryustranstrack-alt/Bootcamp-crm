@@ -171,7 +171,7 @@ export default function LeadForm({
           required
           value={form.nama}
           onChange={(e) => setForm({ ...form, nama: e.target.value })}
-          className="border rounded px-3 py-2"
+          className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
         />
       </div>
 
@@ -185,12 +185,12 @@ export default function LeadForm({
           value={form.kontak}
           onChange={(e) => updateKontak(e.target.value)}
           readOnly={lockContact}
-          className={`border rounded px-3 py-2 ${
-            lockContact ? "bg-gray-50 text-gray-500" : ""
+          className={`border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent ${
+            lockContact ? "bg-[var(--color-muted-bg)] text-[var(--color-muted)]" : ""
           }`}
         />
         {lockContact && (
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-[var(--color-muted)]">
             Locked to this WhatsApp chat.
           </span>
         )}
@@ -205,7 +205,7 @@ export default function LeadForm({
           type="email"
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
-          className="border rounded px-3 py-2"
+          className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
         />
       </div>
 
@@ -229,7 +229,7 @@ export default function LeadForm({
           id="perusahaan"
           value={form.perusahaan}
           onChange={(e) => setForm({ ...form, perusahaan: e.target.value })}
-          className="border rounded px-3 py-2"
+          className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
         />
       </div>
 
@@ -241,7 +241,7 @@ export default function LeadForm({
           id="jabatan"
           value={form.jabatan}
           onChange={(e) => setForm({ ...form, jabatan: e.target.value })}
-          className="border rounded px-3 py-2"
+          className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
         />
       </div>
 
@@ -253,7 +253,7 @@ export default function LeadForm({
           id="kota"
           value={form.kota}
           onChange={(e) => setForm({ ...form, kota: e.target.value })}
-          className="border rounded px-3 py-2"
+          className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
         />
       </div>
 
@@ -265,7 +265,7 @@ export default function LeadForm({
           id="produk"
           value={form.produk}
           onChange={(e) => setForm({ ...form, produk: e.target.value })}
-          className="border rounded px-3 py-2"
+          className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
         />
       </div>
 
@@ -277,7 +277,7 @@ export default function LeadForm({
           id="estimasi_nilai"
           value={form.estimasi_nilai}
           onChange={(estimasi_nilai) => setForm({ ...form, estimasi_nilai })}
-          className="border rounded px-3 py-2"
+          className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
         />
       </div>
 
@@ -290,7 +290,7 @@ export default function LeadForm({
           value={form.catatan}
           onChange={(e) => setForm({ ...form, catatan: e.target.value })}
           rows={3}
-          className="border rounded px-3 py-2"
+          className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
         />
       </div>
 
@@ -303,7 +303,7 @@ export default function LeadForm({
             id="brand_id"
             value={form.brand_id}
             onChange={(e) => setForm({ ...form, brand_id: e.target.value })}
-            className="border rounded px-3 py-2"
+            className="border border-[var(--color-border)] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
           >
             {brands.map((b) => (
               <option key={b.id} value={b.id}>
@@ -328,20 +328,20 @@ export default function LeadForm({
             profiles={profiles}
           />
         ) : (
-          <p className="text-sm text-gray-500 px-3 py-2 border rounded bg-gray-50">
+          <p className="text-sm text-[var(--color-muted)] px-3 py-2 border border-[var(--color-border)] rounded-lg bg-[var(--color-muted-bg)]">
             {currentProfile ? profileLabel(currentProfile) : "-"}
           </p>
         )}
       </div>
 
       {duplicateWarning && (
-        <p className="text-amber-600 text-sm">{duplicateWarning}</p>
+        <p className="text-[var(--color-warning)] text-sm">{duplicateWarning}</p>
       )}
 
       <button
         type="submit"
         disabled={submitting}
-        className="bg-black text-white rounded px-4 py-2 disabled:opacity-50"
+        className="bg-brand text-on-brand hover:bg-[var(--color-brand-hover)] rounded-lg px-4 py-2 font-medium transition-colors disabled:opacity-50"
       >
         {submitting
           ? "Saving..."
@@ -351,9 +351,11 @@ export default function LeadForm({
       </button>
 
       {success && (
-        <p className="text-green-600 text-sm">Lead saved successfully.</p>
+        <p className="text-[var(--color-success)] text-sm">Lead saved successfully.</p>
       )}
-      {error && <p className="text-red-600 text-sm">Failed to save: {error}</p>}
+      {error && (
+        <p className="text-[var(--color-danger)] text-sm">Failed to save: {error}</p>
+      )}
     </form>
   );
 }

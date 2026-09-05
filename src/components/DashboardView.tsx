@@ -22,7 +22,7 @@ export default function DashboardView() {
           <select
             value={brandFilter}
             onChange={(e) => setBrandFilter(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
+            className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
           >
             <option value="all">All brands</option>
             {brands.map((b) => (

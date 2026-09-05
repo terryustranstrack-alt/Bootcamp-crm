@@ -122,27 +122,29 @@ export default function SalesTable() {
     });
   }
 
-  if (loading) return <p className="p-8">Loading sales data...</p>;
+  if (loading) {
+    return <p className="p-8 text-sm text-[var(--color-muted)]">Loading sales data...</p>;
+  }
 
   return (
     <main className="p-8 flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Sales Team</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Sales Team</h1>
         <button
           type="button"
           onClick={() => setShowForm((v) => !v)}
-          className="bg-black text-white rounded px-4 py-2 text-sm"
+          className="bg-brand text-on-brand hover:bg-[var(--color-brand-hover)] rounded-lg px-4 py-2 text-sm font-medium transition-colors"
         >
           {showForm ? "Close" : "+ Add Sales"}
         </button>
       </div>
 
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      {error && <p className="text-[var(--color-danger)] text-sm">{error}</p>}
 
       {showForm && (
         <form
           action={formAction}
-          className="flex flex-col gap-4 max-w-md border rounded p-4"
+          className="flex flex-col gap-4 max-w-md border border-[var(--color-border)] rounded-xl p-4"
         >
           <div className="flex flex-col gap-1">
             <label htmlFor="nama" className="text-sm font-medium">
@@ -152,7 +154,7 @@ export default function SalesTable() {
               id="nama"
               name="nama"
               required
-              className="border rounded px-3 py-2"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -164,14 +166,14 @@ export default function SalesTable() {
               name="email"
               type="email"
               required
-              className="border rounded px-3 py-2"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2"
             />
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="phone" className="text-sm font-medium">
               Phone
             </label>
-            <input id="phone" name="phone" className="border rounded px-3 py-2" />
+            <input id="phone" name="phone" className="border border-[var(--color-border)] rounded-lg px-3 py-2" />
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="password" className="text-sm font-medium">
@@ -183,7 +185,7 @@ export default function SalesTable() {
               type="password"
               required
               minLength={6}
-              className="border rounded px-3 py-2"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2"
             />
           </div>
           {brands.length > 1 && (
@@ -195,7 +197,7 @@ export default function SalesTable() {
                 id="brand_id"
                 name="brand_id"
                 defaultValue={brands.find((b) => b.is_default)?.id ?? ""}
-                className="border rounded px-3 py-2"
+                className="border border-[var(--color-border)] rounded-lg px-3 py-2"
               >
                 {brands.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -208,20 +210,20 @@ export default function SalesTable() {
           <button
             type="submit"
             disabled={formPending}
-            className="self-start bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
+            className="self-start bg-brand text-on-brand hover:bg-[var(--color-brand-hover)] rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
           >
             {formPending ? "Saving..." : "Save Sales"}
           </button>
           {formState?.error && (
-            <p className="text-red-600 text-sm">{formState.error}</p>
+            <p className="text-[var(--color-danger)] text-sm">{formState.error}</p>
           )}
         </form>
       )}
 
-      <div className="overflow-x-auto border rounded">
+      <div className="overflow-x-auto border border-[var(--color-border)] rounded-xl">
         <table className="w-full text-sm border-collapse">
           <thead>
-            <tr className="bg-gray-50 border-b text-left">
+            <tr className="bg-[var(--color-muted-bg)] border-b border-[var(--color-border)] text-left">
               <th className="p-2">Name</th>
               <th className="p-2">Phone</th>
               <th className="p-2">Email</th>
@@ -235,7 +237,7 @@ export default function SalesTable() {
           <tbody>
             {profiles.length === 0 && (
               <tr>
-                <td colSpan={brands.length > 1 ? 8 : 7} className="p-4 text-center text-gray-500">
+                <td colSpan={brands.length > 1 ? 8 : 7} className="p-4 text-center text-[var(--color-muted)]">
                   No sales accounts yet.
                 </td>
               </tr>
@@ -251,7 +253,7 @@ export default function SalesTable() {
                   <td className="p-2 font-medium">
                     {profile.full_name || "-"}
                     {profile.is_admin && (
-                      <span className="ml-2 text-xs text-gray-500 font-normal">
+                      <span className="ml-2 text-xs text-[var(--color-muted)] font-normal">
                         (admin)
                       </span>
                     )}
@@ -266,7 +268,7 @@ export default function SalesTable() {
                           handleBrandChange(profile.id, e.target.value)
                         }
                         disabled={isPending}
-                        className="border rounded px-2 py-1 text-xs disabled:opacity-50"
+                        className="border border-[var(--color-border)] rounded-lg px-2 py-1 text-xs disabled:opacity-50"
                       >
                         <option value="">— unset —</option>
                         {brands.map((b) => (
@@ -282,7 +284,7 @@ export default function SalesTable() {
                   <td className="p-2">{formatRupiah(stat.revenuePotensial)}</td>
                   <td className="p-2">
                     {profile.is_admin ? (
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-[var(--color-muted)]">
                         Admin cannot be deleted
                       </span>
                     ) : (
@@ -291,7 +293,7 @@ export default function SalesTable() {
                         onClick={() => handleDelete(profile.id)}
                         onBlur={() => setConfirmDeleteId(null)}
                         disabled={isPending}
-                        className="text-red-600 border border-red-600 rounded px-2 py-1 text-xs hover:bg-red-50 disabled:opacity-50"
+                        className="text-[var(--color-danger)] border border-[var(--color-danger)] rounded-lg px-2 py-1 text-xs hover:bg-red-50 disabled:opacity-50"
                       >
                         {confirmDeleteId === profile.id ? "Confirm delete?" : "Delete"}
                       </button>

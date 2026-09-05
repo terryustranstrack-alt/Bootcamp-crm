@@ -85,8 +85,14 @@ export default function Dashboard({
     };
   }, [leads, now, brandFilter]);
 
-  if (loading) return <p className="p-8">Loading dashboard...</p>;
-  if (error) return <p className="p-8 text-red-600">Failed to load: {error}</p>;
+  if (loading) {
+    return <p className="p-8 text-sm text-[var(--color-muted)]">Loading dashboard…</p>;
+  }
+  if (error) {
+    return (
+      <p className="p-8 text-sm text-[var(--color-danger)]">Failed to load: {error}</p>
+    );
+  }
 
   // Dipakai sebagai penyebut supaya lebar batang grafik proporsional
   // (status dengan lead terbanyak = 100% lebar). Minimal 1 supaya tidak
@@ -96,49 +102,80 @@ export default function Dashboard({
     ...stats.perStatus.map((statusGroup) => statusGroup.count),
   );
 
+  const TILES = [
+    { label: "Total leads", value: stats.totalLeads, accent: "brand" as const },
+    {
+      // The one hero number per screen — the metric worth spending the
+      // brand's red on (see globals.css token comment).
+      label: "Conversion rate",
+      value: `${stats.conversionRate.toFixed(1)}%`,
+      accent: "accent" as const,
+    },
+    {
+      label: "New leads this week",
+      value: stats.leadsMingguIni,
+      accent: "brand" as const,
+    },
+    {
+      label: "Won value",
+      value: formatRupiah(stats.nilaiClosing),
+      accent: "success" as const,
+    },
+  ];
+  const ACCENT_CLASS: Record<(typeof TILES)[number]["accent"], string> = {
+    brand: "text-brand",
+    accent: "text-accent",
+    success: "text-[var(--color-success)]",
+  };
+
+  // Status "hasil akhir" (menang/kalah) diberi warna sesuai artinya di
+  // grafik batang; status yang masih berjalan tetap warna brand netral.
+  const BAR_COLOR: Record<string, string> = {
+    Closing: "bg-[var(--color-success)]",
+    Hilang: "bg-[var(--color-danger)]",
+  };
+
   return (
-    <main className="p-8 flex flex-col gap-6 max-w-3xl">
-      <h1 className="text-xl font-semibold">Dashboard</h1>
+    <main className="p-8 flex flex-col gap-8 max-w-3xl">
+      <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="border rounded p-4">
-          <p className="text-xs text-gray-500">Total Leads</p>
-          <p className="text-2xl font-semibold">{stats.totalLeads}</p>
-        </div>
-        <div className="border rounded p-4">
-          <p className="text-xs text-gray-500">Conversion Rate</p>
-          <p className="text-2xl font-semibold">
-            {stats.conversionRate.toFixed(1)}%
-          </p>
-        </div>
-        <div className="border rounded p-4">
-          <p className="text-xs text-gray-500">New Leads This Week</p>
-          <p className="text-2xl font-semibold">{stats.leadsMingguIni}</p>
-        </div>
-        <div className="border rounded p-4">
-          <p className="text-xs text-gray-500">Won Value</p>
-          <p className="text-2xl font-semibold">
-            {formatRupiah(stats.nilaiClosing)}
-          </p>
-        </div>
+        {TILES.map((tile) => (
+          <div
+            key={tile.label}
+            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm"
+          >
+            <p className="text-xs font-medium text-[var(--color-muted)]">
+              {tile.label}
+            </p>
+            <p
+              className={`font-data text-2xl font-semibold mt-1 ${ACCENT_CLASS[tile.accent]}`}
+            >
+              {tile.value}
+            </p>
+          </div>
+        ))}
       </div>
 
-      <div>
-        <h2 className="font-medium mb-3">
-          Pipeline Distribution (active potential: {formatRupiah(stats.pipelineAktif)})
-        </h2>
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm">
+        <h2 className="font-medium mb-1">Pipeline distribution</h2>
+        <p className="font-data text-xs text-[var(--color-muted)] mb-4">
+          Active potential: {formatRupiah(stats.pipelineAktif)}
+        </p>
         <div className="flex flex-col gap-3">
           {stats.perStatus.map((statusGroup) => (
             <div key={statusGroup.status}>
               <div className="flex justify-between text-sm mb-1">
                 <span>{leadStatusLabel(statusGroup.status)}</span>
-                <span className="text-gray-500">
-                  {statusGroup.count} lead · {formatRupiah(statusGroup.totalNilai)}
+                <span className="font-data text-xs text-[var(--color-muted)]">
+                  {statusGroup.count} · {formatRupiah(statusGroup.totalNilai)}
                 </span>
               </div>
-              <div className="h-2 bg-gray-100 rounded">
+              <div className="h-2 bg-[var(--color-muted-bg)] rounded-full overflow-hidden">
                 <div
-                  className="h-2 bg-black rounded"
+                  className={`h-2 rounded-full transition-[width] ${
+                    BAR_COLOR[statusGroup.status] ?? "bg-brand"
+                  }`}
                   style={{ width: `${(statusGroup.count / maxCount) * 100}%` }}
                 />
               </div>

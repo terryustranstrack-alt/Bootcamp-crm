@@ -37,7 +37,7 @@ const supabase = createClient();
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs text-gray-500">{label}</span>
+      <span className="text-xs text-[var(--color-muted)]">{label}</span>
       {children}
     </label>
   );
@@ -177,8 +177,8 @@ export default function LeadContextPanel({
   const showPicker = !lead || changing;
 
   return (
-    <aside className="w-80 shrink-0 border-l overflow-y-auto p-3 text-sm flex flex-col gap-3">
-      {error && <p className="text-red-600 text-xs">{error}</p>}
+    <aside className="w-80 shrink-0 border-l border-[var(--color-border)] bg-[var(--color-surface)] overflow-y-auto p-3 text-sm flex flex-col gap-3">
+      {error && <p className="text-[var(--color-danger)] text-xs">{error}</p>}
 
       {showPicker ? (
         <div className="flex flex-col gap-2">
@@ -190,7 +190,7 @@ export default function LeadContextPanel({
               <button
                 type="button"
                 onClick={() => setChanging(false)}
-                className="text-xs text-gray-500 hover:underline"
+                className="text-xs text-[var(--color-muted)] hover:underline"
               >
                 Cancel
               </button>
@@ -202,7 +202,7 @@ export default function LeadContextPanel({
               <button
                 type="button"
                 onClick={() => setShowNewLeadForm(false)}
-                className="text-xs text-gray-500 self-start hover:underline"
+                className="text-xs text-[var(--color-muted)] self-start hover:underline"
               >
                 ← back to search
               </button>
@@ -222,7 +222,7 @@ export default function LeadContextPanel({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search lead name/number…"
-                className="border rounded px-2 py-1"
+                className="border border-[var(--color-border)] rounded-lg px-2 py-1"
               />
               {searchResults.length > 0 && (
                 <ul className="flex flex-col gap-1">
@@ -232,7 +232,7 @@ export default function LeadContextPanel({
                         type="button"
                         onClick={() => handleLink(l.id)}
                         disabled={isPending}
-                        className="text-left w-full px-2 py-1 rounded hover:bg-gray-50 disabled:opacity-50"
+                        className="text-left w-full px-2 py-1 rounded-lg hover:bg-[var(--color-muted-bg)] disabled:opacity-50"
                       >
                         {l.nama} · {l.kontak}
                       </button>
@@ -243,7 +243,7 @@ export default function LeadContextPanel({
               <button
                 type="button"
                 onClick={() => setShowNewLeadForm(true)}
-                className="border rounded px-2 py-1 self-start hover:bg-gray-50"
+                className="border border-[var(--color-border)] rounded-lg px-2 py-1 self-start hover:bg-[var(--color-muted-bg)]"
               >
                 + Create new lead
               </button>
@@ -264,7 +264,7 @@ export default function LeadContextPanel({
               <button
                 type="button"
                 onClick={() => setChanging(true)}
-                className="text-xs text-gray-500 hover:underline shrink-0"
+                className="text-xs text-[var(--color-muted)] hover:underline shrink-0"
               >
                 Change
               </button>
@@ -274,7 +274,7 @@ export default function LeadContextPanel({
               <select
                 value={lead.status}
                 onChange={(e) => handleStatus(e.target.value as LeadStatus)}
-                className="border rounded px-2 py-1"
+                className="border border-[var(--color-border)] rounded-lg px-2 py-1"
               >
                 {LEAD_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -290,7 +290,7 @@ export default function LeadContextPanel({
                 onChange={(e) =>
                   setEditForm({ ...editForm, nama: e.target.value })
                 }
-                className="border rounded px-2 py-1 w-full"
+                className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
               />
             </Field>
             <Field label="Contact (WhatsApp/phone)">
@@ -298,7 +298,7 @@ export default function LeadContextPanel({
                 value={editForm.kontak}
                 readOnly
                 title="Locked to this WhatsApp chat"
-                className="border rounded px-2 py-1 w-full bg-gray-50 text-gray-500"
+                className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full bg-[var(--color-muted-bg)] text-[var(--color-muted)]"
               />
             </Field>
             <Field label="Source">
@@ -314,7 +314,7 @@ export default function LeadContextPanel({
                 onChange={(e) =>
                   setEditForm({ ...editForm, perusahaan: e.target.value })
                 }
-                className="border rounded px-2 py-1 w-full"
+                className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
               />
             </Field>
             <Field label="Job title">
@@ -323,7 +323,7 @@ export default function LeadContextPanel({
                 onChange={(e) =>
                   setEditForm({ ...editForm, jabatan: e.target.value })
                 }
-                className="border rounded px-2 py-1 w-full"
+                className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
               />
             </Field>
             <Field label="Email">
@@ -333,7 +333,7 @@ export default function LeadContextPanel({
                 onChange={(e) =>
                   setEditForm({ ...editForm, email: e.target.value })
                 }
-                className="border rounded px-2 py-1 w-full"
+                className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
               />
             </Field>
             <Field label="City/region">
@@ -342,7 +342,7 @@ export default function LeadContextPanel({
                 onChange={(e) =>
                   setEditForm({ ...editForm, kota: e.target.value })
                 }
-                className="border rounded px-2 py-1 w-full"
+                className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
               />
             </Field>
             <Field label="Product/need of interest">
@@ -351,7 +351,7 @@ export default function LeadContextPanel({
                 onChange={(e) =>
                   setEditForm({ ...editForm, produk: e.target.value })
                 }
-                className="border rounded px-2 py-1 w-full"
+                className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
               />
             </Field>
             <Field label="Estimated deal value">
@@ -360,7 +360,7 @@ export default function LeadContextPanel({
                 onChange={(estimasi_nilai) =>
                   setEditForm({ ...editForm, estimasi_nilai })
                 }
-                className="border rounded px-2 py-1 w-full"
+                className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
               />
             </Field>
             <Field label="Notes / requirements">
@@ -370,7 +370,7 @@ export default function LeadContextPanel({
                   setEditForm({ ...editForm, catatan: e.target.value })
                 }
                 rows={3}
-                className="border rounded px-2 py-1 w-full"
+                className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
               />
             </Field>
             {isAdmin && (
@@ -389,20 +389,20 @@ export default function LeadContextPanel({
               type="button"
               onClick={handleSaveEdit}
               disabled={savingEdit}
-              className="bg-black text-white rounded px-3 py-1.5 disabled:opacity-50"
+              className="bg-brand text-on-brand hover:bg-[var(--color-brand-hover)] rounded-lg px-3 py-1.5 font-medium transition-colors disabled:opacity-50"
             >
               {savingEdit ? "Saving…" : "Save lead"}
             </button>
 
             <div>
-              <p className="text-xs text-gray-500 mb-1">Recent activity</p>
+              <p className="text-xs text-[var(--color-muted)] mb-1">Recent activity</p>
               <ul className="flex flex-col gap-2">
                 {activities.length === 0 && (
-                  <li className="text-xs text-gray-400">None yet.</li>
+                  <li className="text-xs text-[var(--color-muted)]">None yet.</li>
                 )}
                 {activities.map((a) => (
                   <li key={a.id} className="text-xs">
-                    <span className="text-gray-400">
+                    <span className="text-[var(--color-muted)]">
                       {new Date(a.created_at).toLocaleDateString("id-ID")} ·{" "}
                     </span>
                     {a.type === "status_change"

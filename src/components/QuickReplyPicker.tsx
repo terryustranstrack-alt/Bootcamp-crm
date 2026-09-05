@@ -18,15 +18,15 @@ export default function QuickReplyPicker({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="border rounded px-3 py-2 text-sm hover:bg-gray-50"
+        className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm hover:bg-[var(--color-muted-bg)]"
         title="Quick replies"
       >
         ⚡
       </button>
       {open && (
-        <div className="absolute bottom-full mb-1 left-0 w-64 max-h-60 overflow-y-auto border rounded bg-white shadow z-10">
+        <div className="absolute bottom-full mb-1 left-0 w-64 max-h-60 overflow-y-auto border border-[var(--color-border)] rounded-lg bg-[var(--color-surface)] shadow z-10">
           {quickReplies.length === 0 && (
-            <p className="p-2 text-xs text-gray-500">
+            <p className="p-2 text-xs text-[var(--color-muted)]">
               No quick replies. Add some in Settings.
             </p>
           )}
@@ -38,10 +38,10 @@ export default function QuickReplyPicker({
                 onPick(qr.body);
                 setOpen(false);
               }}
-              className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b last:border-b-0"
+              className="block w-full text-left px-3 py-2 text-sm hover:bg-[var(--color-muted-bg)] border-b border-[var(--color-border)] last:border-b-0"
             >
               <span className="font-medium block truncate">{qr.title}</span>
-              <span className="text-xs text-gray-500 block truncate">
+              <span className="text-xs text-[var(--color-muted)] block truncate">
                 {qr.body}
               </span>
             </button>

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import Image from "next/image";
+import Link from "next/link";
+import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "./login/actions";
@@ -7,18 +9,22 @@ import NavMenu from "@/components/NavMenu";
 import InboxUnreadProvider from "@/components/InboxUnreadProvider";
 import InboxNotifier from "@/components/InboxNotifier";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// UI/body face: a step away from the Inter-everywhere look most SaaS
+// dashboards default to, while staying just as legible for forms and tables.
+const uiFont = Plus_Jakarta_Sans({
+  variable: "--font-ui",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+// Data face: tracked/measured/timestamped values (see .font-data in
+// globals.css) — a fleet-tracking CRM's numbers should read as precise.
+const dataFont = JetBrains_Mono({
+  variable: "--font-data",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "CRM Lead Tracker",
+  title: "TransTRACK CRM",
   description: "Track sales lead progress.",
 };
 
@@ -45,20 +51,34 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${uiFont.variable} ${dataFont.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col bg-background text-foreground">
         {user ? (
           <InboxUnreadProvider>
-            <header className="flex items-center justify-between border-b px-8 py-3 text-sm">
-              <NavMenu isAdmin={isAdmin} />
+            <header className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-2.5 text-sm">
+              <div className="flex items-center gap-5">
+                <Link href="/dashboard" className="flex items-center shrink-0">
+                  <Image
+                    src="/logo.png"
+                    alt="TransTRACK"
+                    width={32}
+                    height={32}
+                    className="rounded"
+                    priority
+                  />
+                </Link>
+                <NavMenu isAdmin={isAdmin} />
+              </div>
               <div className="flex items-center gap-4">
                 <InboxNotifier />
-                <span className="text-gray-500">{user.email}</span>
+                <span className="font-data text-xs text-[var(--color-muted)]">
+                  {user.email}
+                </span>
                 <form action={signOut}>
                   <button
                     type="submit"
-                    className="text-gray-500 hover:underline"
+                    className="text-[var(--color-muted)] hover:text-foreground hover:underline"
                   >
                     Log Out
                   </button>

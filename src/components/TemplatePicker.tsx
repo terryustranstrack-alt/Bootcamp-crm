@@ -72,11 +72,11 @@ export default function TemplatePicker({
   }
 
   if (loading) {
-    return <p className="text-xs text-gray-500">Loading templates…</p>;
+    return <p className="text-xs text-[var(--color-muted)]">Loading templates…</p>;
   }
   if (templates.length === 0) {
     return (
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-[var(--color-muted)]">
         No approved templates yet. An admin can add them in WhatsApp Manager and
         sync from Settings.
       </p>
@@ -88,7 +88,7 @@ export default function TemplatePicker({
       <select
         value={selectedId}
         onChange={(e) => pickTemplate(e.target.value)}
-        className="border rounded px-2 py-1.5 text-sm"
+        className="border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-sm"
       >
         <option value="">Choose a template…</option>
         {templates.map((t) => (
@@ -105,7 +105,7 @@ export default function TemplatePicker({
               value={headerImageUrl}
               onChange={(e) => setHeaderImageUrl(e.target.value)}
               placeholder="Header image URL (public https link)"
-              className="border rounded px-2 py-1 text-sm"
+              className="border border-[var(--color-border)] rounded-lg px-2 py-1 text-sm"
             />
           )}
           {params.map((value, i) => (
@@ -118,24 +118,24 @@ export default function TemplatePicker({
                 setParams(next);
               }}
               placeholder={`Value for {{${i + 1}}}`}
-              className="border rounded px-2 py-1 text-sm"
+              className="border border-[var(--color-border)] rounded-lg px-2 py-1 text-sm"
             />
           ))}
-          <p className="text-xs bg-gray-50 border rounded p-2 whitespace-pre-wrap">
+          <p className="text-xs bg-[var(--color-muted-bg)] border border-[var(--color-border)] rounded-lg p-2 whitespace-pre-wrap">
             {renderTemplate(selected.body_text, params) || "(empty template)"}
           </p>
           <button
             type="button"
             onClick={handleSend}
             disabled={isPending}
-            className="bg-black text-white rounded px-3 py-1.5 text-sm self-start disabled:opacity-50"
+            className="bg-brand text-on-brand hover:bg-[var(--color-brand-hover)] rounded-lg px-3 py-1.5 text-sm self-start font-medium transition-colors disabled:opacity-50"
           >
             {isPending ? "Sending…" : "Send template"}
           </button>
         </>
       )}
 
-      {error && <p className="text-red-600 text-xs">{error}</p>}
+      {error && <p className="text-[var(--color-danger)] text-xs">{error}</p>}
     </div>
   );
 }

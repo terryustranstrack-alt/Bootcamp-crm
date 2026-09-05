@@ -163,7 +163,7 @@ export default function ChatMetrics({
   if (loading) {
     return (
       <section className="px-8 pb-8 max-w-3xl">
-        <p className="text-sm text-gray-500">Loading chat metrics…</p>
+        <p className="text-sm text-[var(--color-muted)]">Loading chat metrics…</p>
       </section>
     );
   }
@@ -175,52 +175,58 @@ export default function ChatMetrics({
       <h2 className="font-medium">WhatsApp Inbox</h2>
 
       <div className="grid grid-cols-3 gap-4">
-        <div className="border rounded p-4">
-          <p className="text-xs text-gray-500">Open conversations</p>
-          <p className="text-2xl font-semibold">{stats.openCount}</p>
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+          <p className="text-xs text-[var(--color-muted)]">Open conversations</p>
+          <p className="font-data text-2xl font-semibold mt-1">{stats.openCount}</p>
         </div>
-        <div className="border rounded p-4">
-          <p className="text-xs text-gray-500">Awaiting a reply</p>
-          <p className="text-2xl font-semibold">{stats.unanswered}</p>
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+          <p className="text-xs text-[var(--color-muted)]">Awaiting a reply</p>
+          <p className="font-data text-2xl font-semibold mt-1 text-[var(--color-warning)]">
+            {stats.unanswered}
+          </p>
         </div>
-        <div className="border rounded p-4">
-          <p className="text-xs text-gray-500">Avg. first reply</p>
-          <p className="text-2xl font-semibold">
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+          <p className="text-xs text-[var(--color-muted)]">Avg. first reply</p>
+          <p className="font-data text-2xl font-semibold mt-1">
             {formatDuration(stats.avgReplyMs)}
           </p>
         </div>
       </div>
 
       <div>
-        <p className="text-xs text-gray-500 mb-2">Chatbot</p>
+        <p className="text-xs text-[var(--color-muted)] mb-2">Chatbot</p>
         <div className="grid grid-cols-2 gap-4">
-          <div className="border rounded p-4">
-            <p className="text-xs text-gray-500">Bot replies sent (30d)</p>
-            <p className="text-2xl font-semibold">{stats.botReplies}</p>
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+            <p className="text-xs text-[var(--color-muted)]">Bot replies sent (30d)</p>
+            <p className="font-data text-2xl font-semibold mt-1 text-[var(--color-ai)]">
+              {stats.botReplies}
+            </p>
           </div>
-          <div className="border rounded p-4">
-            <p className="text-xs text-gray-500">Leads captured by bot</p>
-            <p className="text-2xl font-semibold">{stats.botLeadCount}</p>
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-sm">
+            <p className="text-xs text-[var(--color-muted)]">Leads captured by bot</p>
+            <p className="font-data text-2xl font-semibold mt-1 text-[var(--color-ai)]">
+              {stats.botLeadCount}
+            </p>
           </div>
         </div>
       </div>
 
       {stats.perSales.length > 0 && (
         <div>
-          <p className="text-xs text-gray-500 mb-2">
+          <p className="text-xs text-[var(--color-muted)] mb-2">
             Open conversations by person
           </p>
           <div className="flex flex-col gap-2">
             {stats.perSales.map((s) => (
               <div key={s.name} className="flex items-center gap-2 text-sm">
                 <span className="w-32 shrink-0 truncate">{s.name}</span>
-                <div className="flex-1 h-2 bg-gray-100 rounded">
+                <div className="flex-1 h-2 bg-[var(--color-muted-bg)] rounded-full overflow-hidden">
                   <div
-                    className="h-2 bg-black rounded"
+                    className="h-2 bg-brand rounded-full"
                     style={{ width: `${(s.count / maxCount) * 100}%` }}
                   />
                 </div>
-                <span className="w-6 text-right text-xs">{s.count}</span>
+                <span className="font-data w-6 text-right text-xs">{s.count}</span>
               </div>
             ))}
           </div>

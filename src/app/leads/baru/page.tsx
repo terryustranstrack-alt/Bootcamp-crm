@@ -10,11 +10,11 @@ export default function TambahLeadPage() {
     <main className="p-8">
       <Link
         href="/"
-        className="text-sm text-gray-500 hover:underline inline-block mb-4"
+        className="text-sm text-[var(--color-muted)] hover:text-foreground hover:underline inline-block mb-4"
       >
         ← Back to Board
       </Link>
-      <h1 className="text-xl font-semibold mb-6">Add New Lead</h1>
+      <h1 className="text-2xl font-semibold tracking-tight mb-6">Add New Lead</h1>
       <LeadForm />
     </main>
   );

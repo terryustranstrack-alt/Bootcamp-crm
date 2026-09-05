@@ -218,17 +218,21 @@ export default function ProspekTable() {
     loadLeads();
   }
 
-  if (loading) return <p className="p-8">Loading prospects...</p>;
-  if (error) return <p className="p-8 text-red-600">Failed to load: {error}</p>;
+  if (loading) {
+    return <p className="p-8 text-sm text-[var(--color-muted)]">Loading prospects...</p>;
+  }
+  if (error) {
+    return <p className="p-8 text-sm text-[var(--color-danger)]">Failed to load: {error}</p>;
+  }
 
   return (
     <main className="p-8 flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">Prospects</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Prospects</h1>
           <Link
             href="/leads/baru"
-            className="bg-black text-white rounded px-4 py-2 text-sm"
+            className="bg-brand text-on-brand hover:bg-[var(--color-brand-hover)] rounded-lg px-4 py-2 text-sm font-medium transition-colors"
           >
             + Add Lead
           </Link>
@@ -239,13 +243,13 @@ export default function ProspekTable() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search name..."
-            className="border rounded px-3 py-2 text-sm w-64"
+            className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm w-64"
           />
           {currentProfile?.is_admin && brands.length > 1 && (
             <select
               value={brandFilter}
               onChange={(e) => setBrandFilter(e.target.value)}
-              className="border rounded px-3 py-2 text-sm"
+              className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
             >
               <option value="all">All brands</option>
               {brands.map((b) => (
@@ -255,7 +259,7 @@ export default function ProspekTable() {
               ))}
             </select>
           )}
-          <label className="flex items-center gap-2 border rounded px-3 py-2 text-sm">
+          <label className="flex items-center gap-2 border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm">
             <input
               type="checkbox"
               checked={followUpOnly}
@@ -267,13 +271,13 @@ export default function ProspekTable() {
             type="date"
             value={filterDate}
             onChange={(e) => setFilterDate(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
+            className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
           />
           {filterDate && (
             <button
               type="button"
               onClick={() => setFilterDate("")}
-              className="text-sm text-gray-500 hover:underline"
+              className="text-sm text-[var(--color-muted)] hover:underline"
             >
               Clear date filter
             </button>
@@ -289,7 +293,7 @@ export default function ProspekTable() {
                 leadsToCsv(leads, brandNames),
               );
             }}
-            className="border rounded px-3 py-2 text-sm hover:bg-gray-50"
+            className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm hover:bg-[var(--color-muted-bg)]"
           >
             Export CSV
           </button>
@@ -304,7 +308,7 @@ export default function ProspekTable() {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={importing}
-            className="border rounded px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+            className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm hover:bg-[var(--color-muted-bg)] disabled:opacity-50"
           >
             {importing ? "Importing..." : "Import CSV"}
           </button>
@@ -312,13 +316,13 @@ export default function ProspekTable() {
       </div>
 
       {importMessage && (
-        <p className="text-sm text-gray-600">{importMessage}</p>
+        <p className="text-sm text-[var(--color-muted)]">{importMessage}</p>
       )}
 
-      <div className="overflow-x-auto border rounded">
+      <div className="overflow-x-auto border border-[var(--color-border)] rounded-xl">
         <table className="w-full text-sm border-collapse">
           <thead>
-            <tr className="bg-gray-50 border-b text-left">
+            <tr className="bg-[var(--color-muted-bg)] border-b border-[var(--color-border)] text-left">
               <th className="p-2">Name</th>
               <th className="p-2">Contact</th>
               <th className="p-2">Source</th>
@@ -335,7 +339,7 @@ export default function ProspekTable() {
           <tbody>
             {filteredLeads.length === 0 && (
               <tr>
-                <td colSpan={11} className="p-4 text-center text-gray-500">
+                <td colSpan={11} className="p-4 text-center text-[var(--color-muted)]">
                   No matching prospects.
                 </td>
               </tr>
@@ -352,7 +356,7 @@ export default function ProspekTable() {
                           onChange={(e) =>
                             setEditForm({ ...editForm, nama: e.target.value })
                           }
-                          className="border rounded px-2 py-1 w-full"
+                          className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
                         />
                       </td>
                       <td className="p-2">
@@ -364,7 +368,7 @@ export default function ProspekTable() {
                               kontak: e.target.value,
                             })
                           }
-                          className="border rounded px-2 py-1 w-full"
+                          className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
                         />
                       </td>
                       <td className="p-2 min-w-40">
@@ -385,7 +389,7 @@ export default function ProspekTable() {
                               perusahaan: e.target.value,
                             })
                           }
-                          className="border rounded px-2 py-1 w-full"
+                          className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
                         />
                       </td>
                       <td className="p-2">
@@ -394,7 +398,7 @@ export default function ProspekTable() {
                           onChange={(e) =>
                             setEditForm({ ...editForm, kota: e.target.value })
                           }
-                          className="border rounded px-2 py-1 w-full"
+                          className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
                         />
                       </td>
                       <td className="p-2">
@@ -406,7 +410,7 @@ export default function ProspekTable() {
                               produk: e.target.value,
                             })
                           }
-                          className="border rounded px-2 py-1 w-full"
+                          className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
                         />
                       </td>
                       <td className="p-2">
@@ -418,7 +422,7 @@ export default function ProspekTable() {
                               estimasi_nilai,
                             })
                           }
-                          className="border rounded px-2 py-1 w-full"
+                          className="border border-[var(--color-border)] rounded-lg px-2 py-1 w-full"
                         />
                       </td>
                       <td className="p-2 min-w-40">
@@ -434,7 +438,7 @@ export default function ProspekTable() {
                             profiles={profiles}
                           />
                         ) : (
-                          <span className="text-gray-500">
+                          <span className="text-[var(--color-muted)]">
                             {currentProfile ? profileLabel(currentProfile) : "-"}
                           </span>
                         )}
@@ -480,7 +484,7 @@ export default function ProspekTable() {
                           e.target.value as LeadStatus,
                         )
                       }
-                      className="border rounded text-sm px-2 py-1"
+                      className="border border-[var(--color-border)] rounded-lg text-sm px-2 py-1"
                     >
                       {LEAD_STATUSES.map((s) => (
                         <option key={s} value={s}>
@@ -489,7 +493,7 @@ export default function ProspekTable() {
                       ))}
                     </select>
                   </td>
-                  <td className="p-2 text-gray-500 whitespace-nowrap">
+                  <td className="p-2 text-[var(--color-muted)] whitespace-nowrap">
                     {new Date(lead.tanggal_update).toLocaleString("id-ID")}
                   </td>
                   <td className="p-2 whitespace-nowrap">
@@ -499,7 +503,7 @@ export default function ProspekTable() {
                           type="button"
                           onClick={() => handleSaveEdit(lead)}
                           disabled={saving}
-                          className="bg-black text-white rounded px-2 py-1 text-xs disabled:opacity-50"
+                          className="bg-brand text-on-brand hover:bg-[var(--color-brand-hover)] rounded-lg px-2 py-1 text-xs transition-colors disabled:opacity-50"
                         >
                           {saving ? "Saving..." : "Save"}
                         </button>
@@ -507,7 +511,7 @@ export default function ProspekTable() {
                           type="button"
                           onClick={() => setEditingId(null)}
                           disabled={saving}
-                          className="border rounded px-2 py-1 text-xs hover:bg-gray-50"
+                          className="border border-[var(--color-border)] rounded-lg px-2 py-1 text-xs hover:bg-[var(--color-muted-bg)]"
                         >
                           Cancel
                         </button>
@@ -516,7 +520,7 @@ export default function ProspekTable() {
                       <button
                         type="button"
                         onClick={() => startEdit(lead)}
-                        className="border rounded px-2 py-1 text-xs hover:bg-gray-50"
+                        className="border border-[var(--color-border)] rounded-lg px-2 py-1 text-xs hover:bg-[var(--color-muted-bg)]"
                       >
                         Edit
                       </button>

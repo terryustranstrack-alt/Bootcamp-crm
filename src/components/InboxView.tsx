@@ -315,15 +315,15 @@ export default function InboxView() {
 
   return (
     <main className="flex flex-1 h-[calc(100vh-56px)]">
-      <aside className="w-80 shrink-0 border-r flex flex-col min-h-0">
-        <div className="border-b shrink-0">
+      <aside className="w-80 shrink-0 border-r border-[var(--color-border)] bg-[var(--color-surface)] flex flex-col min-h-0">
+        <div className="border-b border-[var(--color-border)] shrink-0">
           <h1 className="px-4 pt-3 text-lg font-semibold">WhatsApp Inbox</h1>
           <div className="px-3 py-2">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, number, message…"
-              className="w-full border rounded px-3 py-1.5 text-sm"
+              className="w-full border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-sm"
             />
           </div>
           {currentProfile?.is_admin && brands.length > 1 && (
@@ -331,7 +331,7 @@ export default function InboxView() {
               <select
                 value={brandFilter}
                 onChange={(e) => setBrandFilter(e.target.value)}
-                className="border rounded px-2 py-1 text-xs w-full"
+                className="border border-[var(--color-border)] rounded-lg px-2 py-1 text-xs w-full"
               >
                 <option value="all">All brands</option>
                 {brands.map((b) => (
@@ -348,10 +348,10 @@ export default function InboxView() {
                 key={f.key}
                 type="button"
                 onClick={() => setFilter(f.key)}
-                className={`text-xs rounded px-2 py-1 ${
+                className={`text-xs rounded-lg px-2 py-1 transition-colors ${
                   filter === f.key
-                    ? "bg-black text-white"
-                    : "text-gray-600 hover:bg-gray-100"
+                    ? "bg-accent text-on-accent"
+                    : "text-[var(--color-muted)] hover:bg-[var(--color-muted-bg)]"
                 }`}
               >
                 {f.label}
@@ -362,8 +362,8 @@ export default function InboxView() {
 
         <div className="flex-1 overflow-y-auto min-h-0">
           {messageHits && messageHits.length > 0 && (
-            <div className="border-b bg-gray-50">
-              <p className="px-4 py-1 text-xs font-medium text-gray-400">
+            <div className="border-b border-[var(--color-border)] bg-[var(--color-muted-bg)]">
+              <p className="px-4 py-1 text-xs font-medium text-[var(--color-muted)]">
                 Message matches
               </p>
               {messageHits.map((hit) => {
@@ -375,12 +375,12 @@ export default function InboxView() {
                     key={hit.messageId}
                     type="button"
                     onClick={() => setSelectedConversationId(hit.conversationId)}
-                    className="text-left w-full px-4 py-2 border-b hover:bg-white"
+                    className="text-left w-full px-4 py-2 border-b border-[var(--color-border)] hover:bg-[var(--color-surface)]"
                   >
                     <span className="text-xs font-medium truncate block">
                       {c ? contactLabel(c) : "Conversation"}
                     </span>
-                    <span className="text-xs text-gray-500 truncate block">
+                    <span className="text-xs text-[var(--color-muted)] truncate block">
                       {hit.direction === "outbound" ? "→ " : ""}
                       {hit.snippet}
                     </span>
@@ -391,7 +391,7 @@ export default function InboxView() {
           )}
 
           {filteredConversations.length === 0 && (
-            <p className="p-4 text-sm text-gray-500">
+            <p className="p-4 text-sm text-[var(--color-muted)]">
               {conversations.length === 0
                 ? "No conversations yet."
                 : "Nothing here."}
@@ -406,8 +406,10 @@ export default function InboxView() {
                 key={conversation.id}
                 type="button"
                 onClick={() => setSelectedConversationId(conversation.id)}
-                className={`text-left w-full px-4 py-3 border-b hover:bg-gray-50 ${
-                  selectedConversationId === conversation.id ? "bg-gray-100" : ""
+                className={`text-left w-full px-4 py-3 border-b border-[var(--color-border)] hover:bg-[var(--color-muted-bg)] ${
+                  selectedConversationId === conversation.id
+                    ? "bg-[var(--color-muted-bg)]"
+                    : ""
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -415,30 +417,30 @@ export default function InboxView() {
                     {contactLabel(conversation)}
                   </span>
                   {conversation.unread_count > 0 && (
-                    <span className="bg-black text-white text-xs rounded-full px-1.5 py-0.5 shrink-0">
+                    <span className="font-data bg-[var(--color-danger)] text-white text-xs rounded-full px-1.5 py-0.5 shrink-0">
                       {conversation.unread_count}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 truncate">
+                <p className="text-xs text-[var(--color-muted)] truncate">
                   {conversation.last_message_preview || "-"}
                 </p>
                 {lead && (
-                  <p className="text-xs text-gray-400 mt-1 truncate">
+                  <p className="text-xs text-[var(--color-muted)] mt-1 truncate">
                     Lead: {lead.nama}
                   </p>
                 )}
                 <div className="flex gap-2 mt-1">
                   {!conversation.assigned_to && (
-                    <span className="text-xs text-amber-600">Unclaimed</span>
+                    <span className="text-xs text-[var(--color-warning)]">Unclaimed</span>
                   )}
                   {needsFollowUp(conversation) && (
-                    <span className="text-xs text-purple-600">
+                    <span className="text-xs text-[var(--color-ai)]">
                       🤖 → follow up
                     </span>
                   )}
                   {conversation.status === "resolved" && (
-                    <span className="text-xs text-green-600">Resolved</span>
+                    <span className="text-xs text-[var(--color-success)]">Resolved</span>
                   )}
                 </div>
               </button>
@@ -447,17 +449,17 @@ export default function InboxView() {
         </div>
       </aside>
 
-      <section className="flex-1 flex flex-col min-h-0">
+      <section className="flex-1 flex flex-col min-h-0 bg-background">
         {!selectedConversation ? (
-          <p className="p-8 text-gray-500 text-sm">
+          <p className="p-8 text-[var(--color-muted)] text-sm">
             Select a conversation on the left.
           </p>
         ) : (
           <>
-            <div className="border-b px-4 py-3 flex items-center justify-between gap-4 shrink-0">
+            <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 flex items-center justify-between gap-4 shrink-0">
               <div className="min-w-0">
                 <p className="font-medium">{contactLabel(selectedConversation)}</p>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--color-muted)]">
                   <span>
                     {linkedLead ? (
                       <Link
@@ -477,7 +479,7 @@ export default function InboxView() {
                         value={selectedConversation.assigned_to ?? ""}
                         onChange={(e) => handleAssign(e.target.value || null)}
                         disabled={isPending}
-                        className="border rounded px-1 py-0.5 text-xs disabled:opacity-50"
+                        className="border border-[var(--color-border)] rounded px-1 py-0.5 text-xs disabled:opacity-50"
                       >
                         <option value="">Unclaimed</option>
                         {profiles.map((profile) => (
@@ -487,7 +489,7 @@ export default function InboxView() {
                         ))}
                       </select>
                     ) : (
-                      <span className="text-gray-700">
+                      <span className="text-foreground">
                         {assigneeProfile
                           ? profileLabel(assigneeProfile)
                           : "Unclaimed"}
@@ -502,7 +504,7 @@ export default function InboxView() {
                     type="button"
                     onClick={handleClaim}
                     disabled={isPending}
-                    className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+                    className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 hover:bg-[var(--color-muted-bg)] disabled:opacity-50"
                   >
                     Claim
                   </button>
@@ -512,7 +514,7 @@ export default function InboxView() {
                     type="button"
                     onClick={() => handleSetStatus("open")}
                     disabled={isPending}
-                    className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+                    className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 hover:bg-[var(--color-muted-bg)] disabled:opacity-50"
                   >
                     Reopen
                   </button>
@@ -521,7 +523,7 @@ export default function InboxView() {
                     type="button"
                     onClick={() => handleSetStatus("resolved")}
                     disabled={isPending}
-                    className="text-sm border rounded px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+                    className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 hover:bg-[var(--color-muted-bg)] disabled:opacity-50"
                   >
                     Mark resolved
                   </button>
@@ -533,23 +535,25 @@ export default function InboxView() {
               {messages.map((m) => (
                 <div
                   key={m.id}
-                  className={`max-w-md rounded px-3 py-2 text-sm ${
+                  className={`max-w-md rounded-2xl px-3 py-2 text-sm ${
                     m.direction === "outbound"
-                      ? "self-end bg-black text-white"
-                      : "self-start bg-gray-100"
+                      ? "self-end bg-brand text-on-brand"
+                      : "self-start bg-[var(--color-muted-bg)]"
                   }`}
                 >
                   <MessageBody m={m} />
                   <p
-                    className={`text-[10px] mt-1 ${
+                    className={`font-data text-[10px] mt-1 ${
                       m.direction === "outbound"
-                        ? "text-gray-300"
-                        : "text-gray-400"
+                        ? "text-white/70"
+                        : "text-[var(--color-muted)]"
                     }`}
                   >
                     {messageTime(m)}
                     {m.direction === "outbound" && ` · ${m.status}`}
-                    {m.sent_by_bot && " · 🤖 Bot"}
+                    {m.sent_by_bot && (
+                      <span className="text-[var(--color-ai)]"> · 🤖 Bot</span>
+                    )}
                   </p>
                   {m.direction === "outbound" &&
                     m.status === "failed" &&
@@ -558,7 +562,7 @@ export default function InboxView() {
                         type="button"
                         onClick={() => handleRetry(m.id)}
                         disabled={isPending}
-                        className="mt-1 text-[10px] underline text-gray-200 disabled:opacity-50"
+                        className="mt-1 text-[10px] underline text-white/80 disabled:opacity-50"
                       >
                         Retry
                       </button>
@@ -568,14 +572,16 @@ export default function InboxView() {
             </div>
 
             {actionError && (
-              <p className="text-red-600 text-sm px-4 shrink-0">{actionError}</p>
+              <p className="text-[var(--color-danger)] text-sm px-4 shrink-0">
+                {actionError}
+              </p>
             )}
 
             {windowClosed ? (
               // Di luar jendela 24 jam: teks bebas tidak bisa dikirim, cuma
               // template resmi.
-              <div className="border-t p-4 shrink-0 flex flex-col gap-2">
-                <p className="bg-amber-50 text-amber-700 text-xs px-3 py-2 rounded">
+              <div className="border-t border-[var(--color-border)] p-4 shrink-0 flex flex-col gap-2">
+                <p className="bg-amber-50 text-[var(--color-warning)] text-xs px-3 py-2 rounded-lg">
                   It&apos;s been more than 24 hours since this contact&apos;s
                   last message — WhatsApp only allows an approved template now.
                 </p>
@@ -587,7 +593,7 @@ export default function InboxView() {
             ) : (
               <>
                 {showTemplatePicker && (
-                  <div className="border-t p-4 shrink-0 bg-gray-50">
+                  <div className="border-t border-[var(--color-border)] p-4 shrink-0 bg-[var(--color-muted-bg)]">
                     <TemplatePicker
                       conversationId={selectedConversation.id}
                       onSent={() => setShowTemplatePicker(false)}
@@ -599,7 +605,7 @@ export default function InboxView() {
                     e.preventDefault();
                     handleSend();
                   }}
-                  className="border-t p-4 flex gap-2 shrink-0"
+                  className="border-t border-[var(--color-border)] bg-[var(--color-surface)] p-4 flex gap-2 shrink-0"
                 >
                   <input
                     ref={fileInputRef}
@@ -612,7 +618,7 @@ export default function InboxView() {
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isPending || uploading}
                     title="Attach a file"
-                    className="border rounded px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                    className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm hover:bg-[var(--color-muted-bg)] disabled:opacity-50"
                   >
                     {uploading ? "…" : "📎"}
                   </button>
@@ -625,7 +631,7 @@ export default function InboxView() {
                     type="button"
                     onClick={() => setShowTemplatePicker((v) => !v)}
                     title="Use a template"
-                    className="border rounded px-3 py-2 text-sm hover:bg-gray-50"
+                    className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm hover:bg-[var(--color-muted-bg)]"
                   >
                     Tmpl
                   </button>
@@ -633,12 +639,12 @@ export default function InboxView() {
                     value={draftText}
                     onChange={(e) => setDraftText(e.target.value)}
                     placeholder="Type a message..."
-                    className="flex-1 border rounded px-3 py-2 text-sm"
+                    className="flex-1 border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
                   />
                   <button
                     type="submit"
                     disabled={isPending || !draftText.trim()}
-                    className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
+                    className="bg-brand text-on-brand hover:bg-[var(--color-brand-hover)] rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
                   >
                     Send
                   </button>

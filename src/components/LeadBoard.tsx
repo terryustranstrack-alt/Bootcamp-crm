@@ -56,9 +56,9 @@ function LeadCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`border rounded p-3 bg-white shadow-sm ${
+      className={`border border-[var(--color-border)] rounded-lg p-3 bg-[var(--color-surface)] shadow-sm ${
         isDragging ? "opacity-50" : ""
-      } ${overdue ? "border-amber-400 border-2" : ""}`}
+      } ${overdue ? "border-[var(--color-warning)] border-2" : ""}`}
     >
       <div
         {...listeners}
@@ -72,22 +72,22 @@ function LeadCard({
         >
           {lead.nama}
         </Link>
-        <p className="text-xs text-gray-500 mb-2">
+        <p className="text-xs text-[var(--color-muted)] mb-2">
           Updated: {new Date(lead.tanggal_update).toLocaleString("id-ID")}
         </p>
         {overdue && (
-          <p className="text-xs text-amber-600 font-medium mb-2">
+          <p className="text-xs text-[var(--color-warning)] font-medium mb-2">
             Needs follow-up
           </p>
         )}
-        <p className="text-xs text-gray-500 mb-2">
+        <p className="text-xs text-[var(--color-muted)] mb-2">
           {assignee ? profileLabel(assignee) : "Unassigned"}
         </p>
       </div>
       <select
         value={lead.status}
         onChange={(e) => onStatusChange(lead.id, e.target.value as LeadStatus)}
-        className="w-full border rounded text-sm px-2 py-1"
+        className="w-full border border-[var(--color-border)] rounded-lg text-sm px-2 py-1"
       >
         {LEAD_STATUSES.map((s) => (
           <option key={s} value={s}>
@@ -117,7 +117,7 @@ function LeadColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex-shrink-0 w-64 rounded ${isOver ? "bg-blue-50" : ""}`}
+      className={`flex-shrink-0 w-64 rounded-lg ${isOver ? "bg-[var(--color-muted-bg)]" : ""}`}
     >
       <h2 className="font-semibold mb-3">
         {leadStatusLabel(status)} ({leads.length})
@@ -243,8 +243,12 @@ export default function LeadBoard() {
     });
   }, [leads, search, sumberFilter, assigneeFilter, followUpOnly, brandFilter]);
 
-  if (loading) return <p className="p-8">Loading leads...</p>;
-  if (error) return <p className="p-8 text-red-600">Failed to load: {error}</p>;
+  if (loading) {
+    return <p className="p-8 text-sm text-[var(--color-muted)]">Loading leads...</p>;
+  }
+  if (error) {
+    return <p className="p-8 text-sm text-[var(--color-danger)]">Failed to load: {error}</p>;
+  }
 
   return (
     <div className="flex flex-col gap-4 p-8">
@@ -254,12 +258,12 @@ export default function LeadBoard() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search name or contact..."
-          className="border rounded px-3 py-2 text-sm w-64"
+          className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm w-64"
         />
         <select
           value={sumberFilter}
           onChange={(e) => setSumberFilter(e.target.value)}
-          className="border rounded px-3 py-2 text-sm"
+          className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
         >
           {daftarSumber.map((s) => (
             <option key={s} value={s}>
@@ -270,7 +274,7 @@ export default function LeadBoard() {
         <select
           value={assigneeFilter}
           onChange={(e) => setAssigneeFilter(e.target.value)}
-          className="border rounded px-3 py-2 text-sm"
+          className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
         >
           <option value={SEMUA_ASSIGNEE}>{SEMUA_ASSIGNEE}</option>
           {profiles.map((p) => (
@@ -279,7 +283,7 @@ export default function LeadBoard() {
             </option>
           ))}
         </select>
-        <label className="flex items-center gap-2 border rounded px-3 py-2 text-sm">
+        <label className="flex items-center gap-2 border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm">
           <input
             type="checkbox"
             checked={followUpOnly}
@@ -291,7 +295,7 @@ export default function LeadBoard() {
           <select
             value={brandFilter}
             onChange={(e) => setBrandFilter(e.target.value)}
-            className="border rounded px-3 py-2 text-sm"
+            className="border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm"
           >
             <option value="all">All brands</option>
             {brands.map((b) => (

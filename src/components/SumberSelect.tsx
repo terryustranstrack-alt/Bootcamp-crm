@@ -42,7 +42,7 @@ export default function SumberSelect({
         id={id}
         value={showCustomInput ? LAINNYA : value}
         onChange={(e) => handleSelectChange(e.target.value)}
-        className="border rounded px-3 py-2"
+        className="border border-[var(--color-border)] rounded-lg px-3 py-2"
       >
         <option value="">- Select source -</option>
         {options.map((o) => (
@@ -57,7 +57,7 @@ export default function SumberSelect({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Type a new source"
-          className="border rounded px-3 py-2"
+          className="border border-[var(--color-border)] rounded-lg px-3 py-2"
           autoFocus
         />
       )}
