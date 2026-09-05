@@ -96,12 +96,43 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- 0019: brands — satu baris per nomor WhatsApp (WABA sama), untuk brand &
+-- tim sales terpisah (chatbot & dashboard sendiri-sendiri per brand).
+-- Nomor yang sudah jalan sekarang jadi brand default; brand baru ditambah
+-- manual lewat SQL saat nomor keduanya siap (lihat README).
+create table if not exists brands (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  phone_number_id text not null unique,
+  is_default boolean not null default false,
+  created_at timestamptz not null default now()
+);
+insert into brands (name, phone_number_id, is_default)
+values ('TransTRACK', '1264862936718628', true)
+on conflict (phone_number_id) do nothing;
+
+alter table brands enable row level security;
+create policy "authenticated read brands"
+  on brands for select to authenticated using (true);
+create policy "admin manage brands"
+  on brands for all to authenticated
+  using (exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin))
+  with check (exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin));
+
+-- 0019: brand yang menaungi sales ini (menentukan pool "belum diklaim" mana
+-- yang boleh dia lihat). Admin tidak terikat satu brand — bebas lihat semua.
+alter table profiles add column if not exists brand_id uuid references brands(id) on delete set null;
+
 alter table leads add column if not exists assigned_to uuid references profiles(id) on delete set null;
 
 -- Lihat supabase/migrations/0007_lead_visibility_rls.sql
 -- Silo per-sales: sales cuma boleh akses lead yang assigned_to/created_by
 -- dia sendiri; admin (profiles.is_admin) tetap akses semua.
 alter table leads add column if not exists created_by uuid references profiles(id) on delete set null;
+
+-- 0019: brand pemilik lead ini (dipakai untuk pool "belum diklaim" per-brand
+-- di policy select/update di bawah — lihat juga tabel "brands" di atas).
+alter table leads add column if not exists brand_id uuid references brands(id) on delete set null;
 
 create or replace function public.set_lead_created_by()
 returns trigger
@@ -119,6 +150,10 @@ create trigger on_lead_insert_set_created_by
   before insert on leads
   for each row execute function public.set_lead_created_by();
 
+-- 0019: klausa assigned_to/created_by/is_admin TIDAK berubah (akses ke lead
+-- milik sendiri tetap sama persis) — yang ditambah cuma pool "belum
+-- diklaim" per-brand, supaya lead yang dibuat otomatis oleh bot (assigned_to
+-- & created_by kosong) kelihatan oleh tim sales brand terkait, bukan cuma admin.
 create policy "sales read own leads, admin reads all"
   on leads for select
   to authenticated
@@ -126,6 +161,10 @@ create policy "sales read own leads, admin reads all"
     assigned_to = auth.uid()
     or created_by = auth.uid()
     or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+    or (
+      assigned_to is null and brand_id is not null
+      and exists (select 1 from profiles p where p.id = auth.uid() and p.brand_id = leads.brand_id)
+    )
   );
 
 create policy "sales update own leads, admin updates all"
@@ -135,11 +174,19 @@ create policy "sales update own leads, admin updates all"
     assigned_to = auth.uid()
     or created_by = auth.uid()
     or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+    or (
+      assigned_to is null and brand_id is not null
+      and exists (select 1 from profiles p where p.id = auth.uid() and p.brand_id = leads.brand_id)
+    )
   )
   with check (
     assigned_to = auth.uid()
     or created_by = auth.uid()
     or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+    or (
+      assigned_to is null and brand_id is not null
+      and exists (select 1 from profiles p where p.id = auth.uid() and p.brand_id = leads.brand_id)
+    )
   );
 
 create policy "sales delete own leads, admin deletes all"
@@ -162,6 +209,10 @@ create policy "read activities of visible leads"
         l.assigned_to = auth.uid()
         or l.created_by = auth.uid()
         or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+        or (
+          l.assigned_to is null and l.brand_id is not null
+          and exists (select 1 from profiles p where p.id = auth.uid() and p.brand_id = l.brand_id)
+        )
       )
     )
   );
@@ -177,6 +228,10 @@ create policy "insert activities of visible leads"
         l.assigned_to = auth.uid()
         or l.created_by = auth.uid()
         or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+        or (
+          l.assigned_to is null and l.brand_id is not null
+          and exists (select 1 from profiles p where p.id = auth.uid() and p.brand_id = l.brand_id)
+        )
       )
     )
   );
@@ -206,33 +261,49 @@ create table if not exists conversations (
   -- enrich_attempts = batas atas percobaan tarik data lead dari chat ini.
   bot_replies_paused boolean not null default false,
   enrich_attempts int not null default 0,
+  -- 0019: brand (nomor WhatsApp) yang menerima percakapan ini. Kontak yang
+  -- sama menghubungi 2 nomor brand berbeda = 2 baris percakapan berbeda,
+  -- makanya brand_id ikut di unique constraint di bawah.
+  brand_id uuid references brands(id) on delete set null,
   created_at timestamptz not null default now(),
-  unique (channel, external_contact_id)
+  unique (channel, external_contact_id, brand_id)
 );
 
 alter table conversations enable row level security;
 
+-- 0019: pool "belum diklaim" (assigned_to is null) dipersempit per-brand —
+-- dulu kelihatan oleh SEMUA sales, sekarang cuma tim sales brand yang sama.
+-- Klausa assigned_to = auth.uid() / is_admin tidak berubah.
 create policy "read own or unclaimed conversations, admin reads all"
   on conversations for select
   to authenticated
   using (
-    assigned_to is null
-    or assigned_to = auth.uid()
+    assigned_to = auth.uid()
     or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+    or (
+      assigned_to is null and brand_id is not null
+      and exists (select 1 from profiles p where p.id = auth.uid() and p.brand_id = conversations.brand_id)
+    )
   );
 
 create policy "update own or unclaimed conversations, admin updates all"
   on conversations for update
   to authenticated
   using (
-    assigned_to is null
-    or assigned_to = auth.uid()
+    assigned_to = auth.uid()
     or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+    or (
+      assigned_to is null and brand_id is not null
+      and exists (select 1 from profiles p where p.id = auth.uid() and p.brand_id = conversations.brand_id)
+    )
   )
   with check (
-    assigned_to is null
-    or assigned_to = auth.uid()
+    assigned_to = auth.uid()
     or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+    or (
+      assigned_to is null and brand_id is not null
+      and exists (select 1 from profiles p where p.id = auth.uid() and p.brand_id = conversations.brand_id)
+    )
   );
 
 create table if not exists messages (
@@ -272,9 +343,12 @@ create policy "read messages of visible conversations"
       select 1 from conversations c
       where c.id = messages.conversation_id
       and (
-        c.assigned_to is null
-        or c.assigned_to = auth.uid()
+        c.assigned_to = auth.uid()
         or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+        or (
+          c.assigned_to is null and c.brand_id is not null
+          and exists (select 1 from profiles p where p.id = auth.uid() and p.brand_id = c.brand_id)
+        )
       )
     )
   );
@@ -287,9 +361,12 @@ create policy "insert messages into visible conversations"
       select 1 from conversations c
       where c.id = messages.conversation_id
       and (
-        c.assigned_to is null
-        or c.assigned_to = auth.uid()
+        c.assigned_to = auth.uid()
         or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
+        or (
+          c.assigned_to is null and c.brand_id is not null
+          and exists (select 1 from profiles p where p.id = auth.uid() and p.brand_id = c.brand_id)
+        )
       )
     )
   );
@@ -387,9 +464,12 @@ create policy "delete own quick replies, admin any"
     or exists (select 1 from profiles p where p.id = auth.uid() and p.is_admin)
   );
 
--- 0015: konfigurasi chatbot AI (satu baris, dikelola admin). Default MATI.
+-- 0015: konfigurasi chatbot AI, dikelola admin. Default MATI.
+-- 0019: bukan lagi satu baris tunggal — brand_id jadi primary key, satu
+-- baris konfigurasi bot per brand (system prompt/FAQ/welcome/toggle sendiri
+-- untuk tiap nomor WhatsApp).
 create table if not exists bot_config (
-  id int primary key default 1 check (id = 1),
+  brand_id uuid primary key references brands(id) on delete cascade,
   enabled boolean not null default false,
   system_prompt text not null default '',
   faq text not null default '',
@@ -399,7 +479,9 @@ create table if not exists bot_config (
   updated_at timestamptz not null default now(),
   updated_by uuid references profiles(id) on delete set null
 );
-insert into bot_config (id) values (1) on conflict (id) do nothing;
+insert into bot_config (brand_id, enabled)
+  select id, false from brands where is_default
+  on conflict (brand_id) do nothing;
 alter table bot_config enable row level security;
 create policy "authenticated read bot config"
   on bot_config for select to authenticated using (true);
